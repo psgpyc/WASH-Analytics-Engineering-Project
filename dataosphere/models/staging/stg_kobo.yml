@@ -1,37 +1,51 @@
 version: 2
 
 models:
-  - name : stg_kobo_submission
-    description: "Standardised Kobo submissions. Grain: 1 row per submission_id (deduped). Each record represents a single Kobo form submission after type casting, normalisation, and deduplication."
+  - name: stg_kobo_submission
+    description: |
+      Standardised Kobo submissions.
+      Grain: 1 row per submission_id (deduped).
+      Purpose: provides the submission “event” backbone (timestamps, status, enumerator/device context) that links to all other survey sections.
+      Primary key: submission_id.
+      Deduplication: retain the latest record per submission_id using record_loaded_at DESC, source_file DESC.
+      Soft delete handling: records with is_deleted = true are excluded from accepted downstream marts (and should be handled via rejected/quarantine pattern if retained elsewhere).
+      Canonicalisation: string fields are trimmed/lowercased where applicable; status is normalised to a controlled set.
+      Downstream notes: join-safe hub for household/member/water_point models via submission_id; use submitted_at/collected_at for “period” reporting.
+
     config:
       tags: ['staging', 'wash', 'kobo']
 
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:
-            description: "Enforce submission contract: if a submission is marked as submitted, it must have a non-null submitted_at timestamp."
+            description: "Submission contract: if status='submitted' then submitted_at must be non-null (excluding soft-deleted rows)."
             expression: "(status <> 'submitted') OR (submitted_at IS NOT NULL)"
           config:
             severity: error
             store_failures: true
-            where: "is_deleted = false" 
+            where: "is_deleted = false"
 
     columns:
       - name: submission_id
-        description: "Primary business key for the submission. Identifies a single Kobo form submission and is the join key to other survey sections captured in the same submission."
-        data_tests: 
+        description: |
+          Primary business key for a Kobo form submission.
+          Join key to other survey sections captured under the same submission event.
+
+        data_tests:
           - not_null:
               config:
                 severity: error
                 store_failures: true
-
           - unique:
               config:
                 severity: error
                 store_failures: true
-      
+
       - name: record_loaded_at
-        description: "Ingestion/load timestamp for the record (lineage/audit). Used for deduplication ordering, freshness monitoring, and incremental processing."
+        description: |
+          Ingestion/load timestamp (lineage/audit).
+          Used for deterministic deduplication ordering and freshness monitoring.
+
         data_tests:
           - not_null:
               config:
@@ -39,12 +53,14 @@ models:
                 store_failures: true
 
       - name: status
-        description: "Normalised submission status from the source system (e.g., submitted vs draft). Used to determine whether submitted_at is required and to support operational reporting."
+        description: |
+          Normalised submission status (e.g., submitted vs draft).
+          Used to enforce timestamp requirements and support ops reporting.
+
         data_tests:
           - accepted_values:
               arguments:
                 values: ['submitted', 'draft']
-
               config:
                 severity: error
                 warn_if: "!= 0"
@@ -52,22 +68,51 @@ models:
                 store_failures: true
 
   - name: stg_kobo_household
-    description: "Standardised household section captured via Kobo. Grain: 1 row per household_id (deduped). Represents a single household record as reported within a submission."
+    description: |
+      Standardised household section captured via Kobo.
+      Grain: 1 row per household_id (deduped).
+      Purpose: provides household-level responses per survey round (water source, filter, sanitation, household size) to feed WASH KPIs.
+      Primary key: household_id.
+      Foreign keys: submission_id → stg_kobo_submission.submission_id; ward_id used for geographic aggregation.
+      Deduplication: retain the latest record per household_id using record_loaded_at DESC, source_file DESC.
+      Soft delete handling: records with is_deleted = true are excluded from accepted downstream marts.
+      Canonicalisation: categorical responses normalised to canonical sets (water_filter_type, primary_water_source).
+      Downstream notes: household_id is the core entity for household KPIs; submission_id provides event-time context for period reporting.
+
     config:
       tags: ['staging', 'wash', 'kobo']
 
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:
-            description: "Validate household size falls within an expected range for reporting (strictly between 0 and 15)."
+            description: "Household contract: hh_size_reported must be within a plausible reporting range (0, 15)."
             expression: "hh_size_reported > 0 and hh_size_reported < 15"
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: "Household contract: household_id must be present (non-null and not blank) for accepted records."
+            expression: "household_id is not null and trim(household_id) <> ''"
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: "Household contract: submission_id must be present (non-null and not blank) for accepted records."
+            expression: "submission_id is not null and trim(submission_id) <> ''"
           config:
             severity: error
             store_failures: true
 
     columns:
       - name: household_id
-        description: "Primary business key for the household record. Identifier for a household as captured in the survey (used to join members and household-level attributes)."
+        description: |
+          Primary business key for the household record as captured in the survey.
+          Join key to member roster and household-level WASH attributes.
+
         data_tests:
           - not_null:
               config:
@@ -79,7 +124,10 @@ models:
                 store_failures: true
 
       - name: submission_id
-        description: "Foreign key to stg_kobo_submission.submission_id. Links the household record back to the submission event in which it was captured."
+        description: |
+          Foreign key to stg_kobo_submission.submission_id.
+          Links the household record back to the submission event in which it was captured.
+
         data_tests:
           - relationships:
               arguments:
@@ -91,7 +139,10 @@ models:
                 where: "submission_id is not null and submission_id <> ''"
 
       - name: ward_id
-        description: "Ward identifier reported for the household. Used for geographic aggregation and location-based analysis (e.g., ward-level WASH indicators)."
+        description: |
+          Ward identifier reported for the household.
+          Used for geographic aggregation (ward-level WASH indicators).
+
         data_tests:
           - not_null:
               config:
@@ -99,11 +150,14 @@ models:
                 store_failures: true
 
       - name: water_filter_type
-        description: "Reported household water treatment / filtration method used at home (normalised to a canonical set). Supports WASH indicator calculations and segmentation."
+        description: |
+          Reported household water treatment/filtration method.
+          Normalised to a canonical set for consistent WASH classification.
+
         data_tests:
           - accepted_values:
               arguments:
-                values: 
+                values:
                   - none
                   - boil
                   - candle
@@ -120,196 +174,11 @@ models:
                 store_failures: true
 
       - name: primary_water_source
-        description: "Primary drinking water source category for the household (normalised to a canonical set). Used for WASH service-level classification and reporting."
+        description: |
+          Primary drinking water source category for the household.
+          Normalised to a canonical set for service-level classification and reporting.
+
         data_tests:
-          - accepted_values:
-              arguments:
-                values: 
-                  - piped_to_dwelling
-                  - piped_to_yard_plot
-                  - public_tap_standpipe
-                  - tubewell_borehole
-                  - protected_dug_well
-                  - unprotected_dug_well
-                  - protected_spring
-                  - unprotected_spring
-                  - rainwater
-                  - tanker_truck_cart
-                  - bottled_water
-                  - surface_water
-                  - spring
-                  - tapstand
-                  - other
-                  - unknown
-              config:
-                severity: error
-                store_failures: true
-
-      - name: hh_size_reported
-        description: "Reported household size (number of household members) as captured in the survey. Used for basic demographic context and validation."
-        data_tests:
-          - not_null:
-              config:
-                severity: error
-                store_failures: true
-
-  - name: stg_kobo_member
-    description: "Standardised household member repeat-group records captured via Kobo. Grain: 1 row per household_id and member_index (deduped). Represents one individual member within a household roster."
-    config:
-      tags: ['staging', 'wash', 'kobo']
-
-    data_tests:
-      - dbt_utils.unique_combination_of_columns:
-          arguments:
-            description: "Ensure member grain is unique within a household by enforcing uniqueness on the (household_id, member_index) composite key."
-            combination_of_columns:
-              - household_id
-              - member_index
-          config:
-            severity: error
-            store_failures: true
-
-      - dbt_utils.expression_is_true:
-          arguments:
-            description: "Validate member age is within a plausible human range for analysis (0 to 120 inclusive)."
-            expression: "member_age_in_years >= 0 and member_age_in_years <= 120"
-          config:
-            severity: error
-            store_failures: true
-
-    columns:
-      - name: household_id
-        description: "Foreign key to stg_kobo_household.household_id. Identifies which household the member belongs to."
-        data_tests: 
-          - not_null:
-              config:
-                severity: error
-                store_failures: true
-
-          - relationships:
-              arguments:
-                to: ref('stg_kobo_household')
-                field: household_id
-              config:
-                severity: error
-                store_failures: true
-                where: "household_id is not null and household_id <> ''"
-
-      - name: submission_id
-        description: "Foreign key to stg_kobo_submission.submission_id. Links the member record back to the submission event in which the roster was captured."
-        data_tests:
-          - not_null:
-              config: 
-                severity: error
-                store_failures: true  
-
-          - relationships:
-              arguments:
-                to: ref('stg_kobo_submission')
-                field: submission_id
-              config:
-                severity: error
-                store_failures: true
-                where: "submission_id is not null and submission_id <> ''"
-
-      - name: member_index
-        description: "Repeat-group index for the member within the household roster. Together with household_id, defines the unique member record grain."
-        data_tests:
-          - not_null:
-              config:
-                severity: error
-                store_failures: true   
-
-      - name: member_sex
-        description: "Reported sex/gender category for the household member, normalised to a canonical set (including unknown/other)."
-        data_tests: 
-          - accepted_values:
-              arguments:
-                values: 
-                  - m
-                  - f
-                  - male
-                  - female
-                  - other
-                  - unknown
-              config:
-                severity: error
-                store_failures: true
-
-  - name: stg_kobo_water_point
-    description: "Standardised water point observation records captured via Kobo. Grain: 1 row per (water_point_id, submission_id) composite key (deduped). Represents a water point recorded/assessed during a submission."
-    config:
-      tags: ['staging', 'wash', 'kobo']
-
-    data_tests:
-      - dbt_utils.unique_combination_of_columns:
-          arguments:
-            description: "Enforce declared grain by ensuring uniqueness on the composite key (water_point_id, submission_id)."
-            combination_of_columns:
-              - water_point_id
-              - submission_id
-          config:
-            severity: error
-            store_failures: true
-
-      - dbt_utils.expression_is_true:
-          arguments:
-            description: "Validate non-negative travel time to the water point in minutes. Distance/time should not be negative for reporting."
-            expression: "distance_minutes is not null and distance_minutes >= 0"
-          config:
-            severity: error
-            store_failures: true
-
-    columns:
-      - name: water_point_id
-        description: "Business identifier for the water point as recorded in the survey. Used with submission_id to uniquely identify a water point observation."
-        data_tests:
-          - not_null:
-              config:
-                severity: error
-                store_failures: true
-
-      - name: submission_id
-        description: "Foreign key to stg_kobo_submission.submission_id. Links the water point observation back to the submission event in which it was recorded."
-        data_tests:
-          - not_null:
-              config:
-                severity: error
-                store_failures: true
-
-          - relationships:
-              arguments:
-                to: ref('stg_kobo_submission')
-                field: submission_id
-              config:
-                severity: error
-                store_failures: true
-                where: "submission_id is not null and submission_id <> ''"
-
-      - name: ward_id
-        description: "Ward identifier where the water point is located or reported. Supports ward-level aggregation and geographic analysis of WASH access."
-        data_tests:
-          - not_null:
-              config:
-                severity: error
-                store_failures: true
-
-      - name: distance_minutes
-        description: "Reported travel time or walking time to reach the water point, in minutes. Used for accessibility analysis and WASH service indicators."
-        data_tests:
-          - not_null:
-              config:
-                severity: error
-                store_failures: true
-
-      - name: source_type
-        description: "Categorised water source type for the water point (normalised to a canonical list). Used for water service classification and reporting."
-        data_tests:
-          - not_null:
-              config:
-                severity: error
-                store_failures: true
-          
           - accepted_values:
               arguments:
                 values:
@@ -325,8 +194,259 @@ models:
                   - tanker_truck_cart
                   - bottled_water
                   - surface_water
-                  - spring
-                  - tapstand
+                  - other
+                  - unknown
+              config:
+                severity: error
+                store_failures: true
+
+      - name: hh_size_reported
+        description: |
+          Reported household size (number of household members) as captured in the survey.
+          Used for demographic context and validation.
+
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+  - name: stg_kobo_member
+    description: |
+      Standardised household member repeat-group records captured via Kobo.
+      Grain: 1 row per (household_id, member_index) (deduped).
+      Purpose: provides member-level health/demographic attributes used to derive household health indicators (e.g., diarrhoea prevalence).
+      Primary key: (household_id, member_index).
+      Foreign keys: household_id → stg_kobo_household.household_id; submission_id → stg_kobo_submission.submission_id.
+      Deduplication: retain the latest record per (household_id, member_index) using record_loaded_at DESC, source_file DESC.
+      Soft delete handling: records with is_deleted = true are excluded from accepted downstream marts.
+      Canonicalisation: member_sex normalised to a canonical set; names trimmed (PII should not be exposed in marts_public).
+      Downstream notes: roll up member records to household×submission for health flags like no_diarrhoea_14d.
+
+    config:
+      tags: ['staging', 'wash', 'kobo']
+
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            description: "Enforce declared member grain: (household_id, member_index) must be unique."
+            combination_of_columns:
+              - household_id
+              - member_index
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: "Member contract: age must be within plausible human range (0–120 inclusive)."
+            expression: "member_age_in_years >= 0 and member_age_in_years <= 120"
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: "Member contract: household_id must be present (non-null and not blank) for accepted records."
+            expression: "household_id is not null and trim(household_id) <> ''"
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: "Member contract: submission_id must be present (non-null and not blank) for accepted records."
+            expression: "submission_id is not null and trim(submission_id) <> ''"
+          config:
+            severity: error
+            store_failures: true
+
+    columns:
+      - name: household_id
+        description: |
+          Foreign key to stg_kobo_household.household_id.
+          Identifies which household the member belongs to.
+
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_kobo_household')
+                field: household_id
+              config:
+                severity: error
+                store_failures: true
+                where: "household_id is not null and household_id <> ''"
+
+      - name: submission_id
+        description: |
+          Foreign key to stg_kobo_submission.submission_id.
+          Links the member record back to the submission event in which the roster was captured.
+
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_kobo_submission')
+                field: submission_id
+              config:
+                severity: error
+                store_failures: true
+                where: "submission_id is not null and submission_id <> ''"
+
+      - name: member_index
+        description: |
+          Repeat-group index for a member within the household roster.
+          Together with household_id, defines the member record grain.
+
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: member_sex
+        description: |
+          Reported sex/gender category for the member.
+          Normalised to a canonical set (including unknown/other).
+
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - m
+                  - f
+                  - male
+                  - female
+                  - other
+                  - unknown
+              config:
+                severity: error
+                store_failures: true
+
+  - name: stg_kobo_water_point
+    description: |
+      Standardised water point observation records captured via Kobo.
+      Grain: 1 row per (water_point_id, submission_id) composite key (deduped).
+      Purpose: provides water-point-level access and classification measures (source type, travel time, functionality) used for WASH access reporting.
+      Primary key: (water_point_id, submission_id).
+      Foreign keys: submission_id → stg_kobo_submission.submission_id; ward_id used for geographic aggregation.
+      Deduplication: retain the latest record per (water_point_id, submission_id) using record_loaded_at DESC, source_file DESC.
+      Soft delete handling: records with is_deleted = true are excluded from accepted downstream marts.
+      Canonicalisation: source_type normalised to a canonical set aligned with household primary_water_source categories.
+      Downstream notes: primarily supports water access dashboards; not strictly required for household “safe drinking water” KPI unless your programme uses observed water points as the source-of-truth.
+
+    config:
+      tags: ['staging', 'wash', 'kobo']
+
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            description: "Enforce declared water point grain: (water_point_id, submission_id) must be unique."
+            combination_of_columns:
+              - water_point_id
+              - submission_id
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: "Water point contract: travel time (distance_minutes) must be present and non-negative."
+            expression: "distance_minutes is not null and distance_minutes >= 0"
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: "Water point contract: water_point_id must be present (non-null and not blank) for accepted records."
+            expression: "water_point_id is not null and trim(water_point_id) <> ''"
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: "Water point contract: submission_id must be present (non-null and not blank) for accepted records."
+            expression: "submission_id is not null and trim(submission_id) <> ''"
+          config:
+            severity: error
+            store_failures: true
+
+    columns:
+      - name: water_point_id
+        description: |
+          Business identifier for the water point as recorded in the survey.
+          Used with submission_id to uniquely identify a water point observation.
+
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: submission_id
+        description: |
+          Foreign key to stg_kobo_submission.submission_id.
+          Links the water point observation back to the submission event in which it was recorded.
+
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_kobo_submission')
+                field: submission_id
+              config:
+                severity: error
+                store_failures: true
+                where: "submission_id is not null and submission_id <> ''"
+
+      - name: ward_id
+        description: |
+          Ward identifier where the water point is located or reported.
+          Supports ward-level aggregation and geographic WASH access analysis.
+
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: distance_minutes
+        description: |
+          Reported travel/walking time to reach the water point, in minutes.
+          Used for accessibility analysis and service-level indicators.
+
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: source_type
+        description: |
+          Categorised water source type for the water point.
+          Normalised to a canonical set for water service classification and reporting.
+
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+          - accepted_values:
+              arguments:
+                values:
+                  - piped_to_dwelling
+                  - piped_to_yard_plot
+                  - public_tap_standpipe
+                  - tubewell_borehole
+                  - protected_dug_well
+                  - unprotected_dug_well
+                  - protected_spring
+                  - unprotected_spring
+                  - rainwater
+                  - tanker_truck_cart
+                  - bottled_water
+                  - surface_water
                   - other
                   - unknown
               config:
