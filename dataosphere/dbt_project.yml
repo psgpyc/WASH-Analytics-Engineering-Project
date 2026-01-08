@@ -1,0 +1,53 @@
+
+name: 'dataosphere'
+version: '1.0.0'
+profile: 'dataosphere'
+
+# These configurations specify where dbt should look for different types of files.
+# The `model-paths` config, for example, states that models in this project can be
+# found in the "models/" directory. You probably won't need to change these!
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:         # directories to be removed by `dbt clean`
+  - "target"
+  - "dbt_packages"
+
+models:
+  dataosphere:
+    staging:
+      +materialized: view
+      +tags: ["wash"]
+      +schema: stage
+
+# seeds:
+#   dataosphere:
+#     +database: ELTIFY
+#     +quote_columns: false
+
+#     raw_household:
+#       +column_types:
+#         household_id: varchar 
+#         ward_id: varchar
+#         household_size: number(10,0) 
+#         gps_lat: number(10,7)
+#         gps_lon: number(10,7)
+
+#     raw_survey_submission:
+#       +column_types:
+#         submission_id: varchar
+#         household_id: varchar
+#         ward_id: varchar 
+#         enumerator_id: varchar
+#         submitted_at: timestamp_ntz
+#         water_source: varchar
+#         has_filter: boolean
+
+
+    
+
+
