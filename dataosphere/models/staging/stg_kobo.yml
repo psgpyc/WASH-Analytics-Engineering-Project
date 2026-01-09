@@ -70,11 +70,11 @@ models:
   - name: stg_kobo_household
     description: |
       Standardised household section captured via Kobo.
-      Grain: 1 row per household_id (deduped).
+      Grain: 1 row per household_id x submission_id (deduped).
       Purpose: provides household-level responses per survey round (water source, filter, sanitation, household size) to feed WASH KPIs.
-      Primary key: household_id.
+      Primary key: household_id, submission_id.
       Foreign keys: submission_id → stg_kobo_submission.submission_id; ward_id used for geographic aggregation.
-      Deduplication: retain the latest record per household_id using record_loaded_at DESC, source_file DESC.
+      Deduplication: retain the latest record per household_id x submission_id using record_loaded_at DESC, source_file DESC.
       Soft delete handling: records with is_deleted = true are excluded from accepted downstream marts.
       Canonicalisation: categorical responses normalised to canonical sets (water_filter_type, primary_water_source).
       Downstream notes: household_id is the core entity for household KPIs; submission_id provides event-time context for period reporting.
@@ -107,6 +107,15 @@ models:
             severity: error
             store_failures: true
 
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: 
+              - household_id
+              - submission_id
+          config:
+            severity: error
+            store_failures: true
+
     columns:
       - name: household_id
         description: |
@@ -118,11 +127,7 @@ models:
               config:
                 severity: error
                 store_failures: true
-          - unique:
-              config:
-                severity: error
-                store_failures: true
-
+   
       - name: submission_id
         description: |
           Foreign key to stg_kobo_submission.submission_id.

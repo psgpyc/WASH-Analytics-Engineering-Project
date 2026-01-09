@@ -50,26 +50,95 @@ WITH source AS (
         *,
 
         -- data quality flags
-        (household_id  IS NULL) AS dq_missing_household_id,
+        (household_id IS NULL OR trim(household_id) = '') AS dq_missing_blank_household_id,
+
+        (submission_id IS NULL OR trim(submission_id) = '') AS dq_missing_blank_submission_id,
 
         (ward_id IS NULL) AS dq_missing_ward_id,
 
+        (water_filter_type IS NULL OR trim(water_filter_type) = '') AS dq_missing_blank_water_filter_type,
+
+        (primary_water_source IS NULL OR trim(primary_water_source) = '') AS dq_missing_blank_primary_water_source,
+
         (
-            hh_size_reported  < 0 
-            OR 
-            hh_size_reported > 10 
+            hh_size_reported IS NOT NULL 
+            AND
+            ( 
+                hh_size_reported  < 0 
+                OR 
+                hh_size_reported > 15
+            )
         ) AS dq_invalid_hh_size,
 
         (
-            water_filter_type = 'unknown'
-            OR
-            water_filter_type  = 'other'
+            water_filter_type IS NOT NULL
+            AND
+            trim(water_filter_type) = ''
+            AND 
+            (
+                water_filter_type = 'unknown'
+                OR
+                water_filter_type  = 'other'
+            )
         ) AS dq_unknown_other_filter_type,
+
         (
-        primary_water_source = 'unknown'
-        OR
-        water_filter_type = 'other'
-        ) AS dq_unknown_other_primary_water_source
+            water_filter_type IS NOT NULL
+            AND
+            trim(water_filter_type) <> ''
+            AND
+            water_filter_type
+            NOT IN (
+                'none',
+                'boil',
+                'candle',
+                'chlorine',
+                'sodis',
+                'ceramic',
+                'biosand',
+                'cloth',
+                'ro_uv',
+                'other',
+                'unknown'
+            )
+        ) AS dq_invalid_water_filter_type,
+
+        (
+            primary_water_source IS NOT NULL 
+            AND
+            trim(primary_water_source) <> ''
+            AND 
+            (
+                primary_water_source = 'unknown'
+                OR
+                primary_water_source = 'other'
+            )
+        ) AS dq_unknown_other_primary_water_source,
+
+        (
+            primary_water_source IS NOT NULL
+            AND
+            trim(primary_water_source) <> ''
+            AND
+            primary_water_source
+            NOT IN (
+                'piped_to_dwelling',
+                'piped_to_yard_plot',
+                'public_tap_standpipe',
+                'tubewell_borehole',
+                'protected_dug_well',
+                'unprotected_dug_well',
+                'protected_spring',
+                'unprotected_spring',
+                'rainwater',
+                'tanker_truck_cart',
+                'bottled_water',
+                'surface_water',
+                'other',
+                'unknown'
+            )
+        ) AS dq_invalid_primary_water_source
+
     FROM
         standardised
 
@@ -80,7 +149,7 @@ WITH source AS (
         set_dq_flags 
     QUALIFY 
         ROW_NUMBER() OVER(
-            PARTITION BY household_id
+            PARTITION BY household_id, submission_id
             ORDER BY record_loaded_at DESC, source_file DESC
         ) = 1
 )

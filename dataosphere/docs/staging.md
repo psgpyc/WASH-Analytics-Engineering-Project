@@ -1,5 +1,3 @@
-# docs/staging.md
-
 ## Purpose of staging (stg_* models)
 
 Staging models are the first transformation layer on top of RAW sources. Their job is to make upstream survey data safe and predictable to build on by applying consistent standardisation and basic data quality rules.

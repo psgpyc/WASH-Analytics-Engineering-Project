@@ -1,5 +1,3 @@
-# docs/data-contracts.md
-
 ## Overview
 
 This document defines the canonical value sets and KPI-building rules used throughout the WASH analytics models. The goal is to ensure that:
@@ -114,6 +112,16 @@ A household survey event is classified as safe if ALL conditions hold:
 Final KPI flag:
 - `is_safe_drinking = has_safe_primary_source AND has_safe_water_filter AND no_diarrhoea_14d`
 
+
+### Reporting period (time basis)
+The period is defined from single, explicit timestamp to ensure consistent aggregation across models and dashboards. 
+
+- **Event timestamp:** `submitted_at`. It represents the moment the form was submitted on the device (closest to “when the survey event happened”), and is preferred over ingestion time.
+- **Event date:** `event_date = DATE(submitted_at)`
+- **Reporting period grain (default):** daily (ward_id × event_date)
+- **Timezone rule:** treat timestamps as UTC (or explicitly convert to UTC before deriving `event_date`).
+- **Fallback rule:** if `submitted_at` is null, the record is not eligible for period-based KPI reporting unless explicitly handled in downstream logic (e.g., quarantine or separate “unknown date” bucket).
+
 ---
 
 ## Safe lists used by the KPI
@@ -157,3 +165,6 @@ Derivation to household×submission:
 Handling missing member data:
 - Recommended strict approach:
   - if member records are missing for a household×submission, treat `no_diarrhoea_14d` as unknown (null) and do not classify the household as safe unless explicitly supported by evidence.
+
+
+
