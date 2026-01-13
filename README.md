@@ -96,28 +96,27 @@ dataosphere/
 ### High level flow
 
 ```mermaid
-%%{init: {'flowchart': {'nodeSpacing': 90, 'rankSpacing': 110}, 'themeVariables': {'fontSize': '14px'}}}%%
 flowchart TB
+  classDef big fill:#EEF2FF,stroke:#6366F1,stroke-width:2px,color:#111827;
 
-RAW["RAW\n(existing Snowflake tables)\n(sources.yml + freshness)"]
-STG["STAGING (stg_)\n- safe casts\n- canonical sets\n- dedupe to grain\n- DQ flags"]
-INT["INTERMEDIATE (int_)\n- submitted-only\n- event joins\n- rollups"]
-MRT["MARTS (dim_/fact_)\n- KPI-ready tables\n- aggregates"]
-REJ["REJECTED (__rejected)\n- quarantined rows\n- replay/triage"]
-MON["MONITORING (mon_)\n- totals\n- rejects\n- rates\n- reasons"]
-SNP["SNAPSHOTS (snap_)\n- SCD2 history\n- dim changes"]
+  RAW[RAW]:::big
+  STG[STAGING]:::big
+  INT[INTERMEDIATE]:::big
+  MRT[MARTS]:::big
+  SNP[SNAPSHOTS]:::big
+  REJ[REJECTED]:::big
+  MON[MONITORING]:::big
 
-RAW --> STG
-STG --> INT
-INT --> MRT
-
-STG --> REJ
-REJ --> MON
-INT --> MON
-MRT --> MON
-
-INT --> SNP
-SNP --> MRT
+  RAW --> STG
+  STG --> INT
+  STG --> REJ
+  INT --> MRT
+  INT --> SNP
+  SNP --> MRT
+  STG --> MON
+  REJ --> MON
+  INT --> MON
+  MRT --> MON
 ```
 
 ## Modelling principles
