@@ -99,13 +99,13 @@ dataosphere/
 %%{init: {"flowchart": {"nodeSpacing": 70, "rankSpacing": 90}, "themeVariables": {"fontSize": "16px"}}}%%
 flowchart TB
 
-  RAW["RAW<br/>Existing Snowflake RAW tables<br/>(sources.yml = metadata + freshness expectations)"]
-  STG["STAGING (stg_)<br/>- safe casts to stable types<br/>- trim/lower + canonical sets<br/>- dedupe to declared grains<br/>- DQ flags + __rejected outputs"]
-  INT["INTERMEDIATE (int_)<br/>- submitted-only filters<br/>- household event joins (household × submission)<br/>- member health rollups (household × submission)<br/>- KPI input shaping"]
-  MRT["MARTS (dim_ / fact_)<br/>- BI-ready facts + aggregates<br/>- KPI flags + safe drinking classification<br/>- ward/day rollups"]
-  REJ["REJECTED / QUARANTINE (__rejected)<br/>Bad rows retained for triage + replay<br/>(not silently dropped)"]
-  MON["MONITORING (mon_)<br/>- totals vs rejected by day/model<br/>- rejection rate by day/model<br/>- rejection reasons (reason_bucket)<br/>- unknown diarrhoea by ward/day"]
-  SNAP["SNAPSHOTS (snap_)<br/>SCD2 history for household attributes<br/>(point-in-time tracking)"]
+  RAW["RAW"]
+  STG["STAGING <br/> (stg_)"]
+  INT["INTERMEDIATE <br/> (int_)"]
+  MRT["MARTS <br/> (dim_ / fact_)"]
+  REJ["REJECTED <br/> (__rejected)"]
+  MON["MONITORING <br/> (mon_)"]
+  SNAP["SNAPSHOTS <br/> (snap_)"]
 
   RAW --> STG --> INT --> MRT
   STG --> REJ --> MON
@@ -256,14 +256,6 @@ This repo includes a dbt snapshot to track household attribute changes over time
 ### What it’s for
 - keep history of attribute changes (filter type, source type, toilet status, reported size, and location fields)
 - enable point-in-time analysis when needed
-
-### How it fits
-
-```mermaid
-flowchart LR
-  INT[int_household_current_source] --> SNAP[snap_dim_household_current\nSCD2 history]
-  SNAP --> DIMV[dim_household_current\n(current view over snapshot)]
-```
 
 Operationally:
 - new RAW arrives
