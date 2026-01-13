@@ -10,6 +10,8 @@ with joined as (
         hh.household_id,
         ss.submission_id,
         ss.ward_id,
+        ss.municipality,
+        ss.district,
         ss.submitted_at,
         hh.hh_size_reported,
         hh.water_filter_type,

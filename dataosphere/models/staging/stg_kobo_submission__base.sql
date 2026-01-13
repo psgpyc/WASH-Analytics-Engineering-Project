@@ -53,25 +53,50 @@ WITH source as (
         try_cast(_source_file as varchar)     as source_file,
         coalesce(try_cast(_is_deleted as boolean), false) as is_deleted,
 
-        -- data quality flags (calculated on the casted/standardised values)
-        (try_cast(submission_id as varchar) is null) as dq_missing_submission_id,
+       
+
+    from source
+), set_dq_flags as (
+    select
+        *,
+         -- data quality flags (calculated on the casted/standardised values)
+        (submission_id is null) as dq_missing_submission_id,
+        (
+            municipality is null
+            or
+            trim(municipality) = ''
+
+        ) as dq_missing_blank_municipality,
 
         (
-            lower(trim(try_cast(status as varchar))) = 'submitted'
+            district is null
+            or
+            trim(district) = ''
+        ) as dq_missing_blank_district,
+
+        (
+            status  = 'submitted'
             and submitted_at is null
         ) as dq_submitted_missing_submitted_at,
 
         (
-            (try_cast(gps_lat as float) is not null and (try_cast(gps_lat as float) < -90 or try_cast(gps_lat as float) > 90))
-            or (try_cast(gps_lon as float) is not null and (try_cast(gps_lon as float) < -180 or try_cast(gps_lon as float) > 180))
-        ) as dq_invalid_gps
+            (gps_lat is not null and gps_lat  < -90 or gps_lat  > 90)
+            or (gps_lon  is not null and gps_lon < -180 or gps_lon  > 180)
+        ) as dq_invalid_gps,
 
-    from source
+        (
+            enumerator_id is null
+            or
+            trim(enumerator_id) = ''
+        ) as dq_missing_blank_enumerator_id
+    from
+        standardised
+
 ), deduped AS (
     SELECT 
         *
     FROM    
-        standardised
+        set_dq_flags
     QUALIFY 
         ROW_NUMBER() OVER(
             PARTITION BY submission_id

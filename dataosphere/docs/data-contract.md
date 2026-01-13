@@ -1,4 +1,4 @@
-# WASH data contract (this repo)
+# WASH data contract 
 
 This file is the single source of truth for how we:
 - clean and standardise categorical fields
@@ -108,7 +108,7 @@ Important:
 
 ---
 
-## 2) Time basis (period reporting)
+## 2) Time basis
 
 We report by a single timestamp so time-based KPIs stay consistent.
 
@@ -126,7 +126,7 @@ Eligibility:
 
 ---
 
-## 3) KPI: “safe drinking water” (household event)
+## 3) KPI: “safe drinking water”
 
 ### 3.1 Grain
 

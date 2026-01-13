@@ -41,16 +41,49 @@ models:
                 severity: error
                 store_failures: true
 
-      - name: record_loaded_at
+      - name: ward_id
         description: |
-          Ingestion/load timestamp (lineage/audit).
-          Used for deterministic deduplication ordering and freshness monitoring.
+          Ward identifier reported for the household.
+          Used for geographic aggregation (ward-level WASH indicators).
 
         data_tests:
           - not_null:
               config:
                 severity: error
                 store_failures: true
+      
+      - name: municipality
+        description: |
+          municipility reported for the household.
+          Used for geographic aggregation (municipility-level WASH indicators).
+
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+      
+      - name: district
+        description: |
+          district reported for the household.
+          Used for geographic aggregation (district-level WASH indicators).
+
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: enumerator_id
+        description: |
+          enumerator identifier
+          
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
 
       - name: status
         description: |
@@ -66,6 +99,7 @@ models:
                 warn_if: "!= 0"
                 error_if: "> 10"
                 store_failures: true
+
 
   - name: stg_kobo_household
     description: |

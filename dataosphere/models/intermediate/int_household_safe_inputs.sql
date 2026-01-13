@@ -15,7 +15,6 @@ with joined as (
         he.water_filter_type,
         he.primary_water_source,
         he.has_toilet,
-        
         hmhr.member_count, 
         hmhr.total_diarrhoea_case_count_14d,
         hmhr.total_unknown_diarrhoea_count_14d,
