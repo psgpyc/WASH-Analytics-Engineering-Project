@@ -257,8 +257,67 @@ models:
                 severity: error
                 store_failures: true
 
-      
+  - name: int_household_current_source
+    description: |
+      Current-state household dimension source at household grain.
+      Grain: 1 row per household_id (latest known household attributes).
+      Purpose: Provides a stable “current attributes” input for the household SCD2 snapshot (do not join to this for event-level KPIs).
+      Derivation: Built by selecting the latest household event per household_id using record_loaded_at (and submission_id as a tie-breaker).
 
+    config:
+      tags: ['int', 'wash', 'kobo']
 
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            description: "Enforce declared grain: each household_id must appear at most once in the current-state source."
+            combination_of_columns:
+              - household_id
+          config:
+            severity: error
+            store_failures: true
 
+    columns:
+      - name: household_id
+        description: |
+          Primary business key for the household entity as captured in the survey instrument.
+          This is the primary key for the current-state household source and the join key used by downstream dimensions/snapshots.
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+          - unique:
+              config:
+                severity: error
+                store_failures: true
 
+      - name: ward_id
+        description: |
+          Ward identifier for the household (current/latest known value).
+          Used as a guaranteed geographic slicer for ward-level WASH reporting and monitoring.
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: municipality
+        description: |
+          Municipality name associated with the household (current/latest known value).
+          Used as a geographic slicer for municipality-level reporting and drill-down.
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: district
+        description: |
+          District name associated with the household (current/latest known value).
+          Used as a geographic slicer for district-level reporting and drill-down.
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true

@@ -17,6 +17,11 @@ clean-targets:         # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
 
+snapshots:
+  dataosphere:          
+    +schema: snapshots  
+    +tags: ['snapshot', 'wash', 'kobo']
+
 models:
   dataosphere:
     staging:

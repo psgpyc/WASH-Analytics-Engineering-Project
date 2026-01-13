@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: dim_household_current
+    description: |
+      Current-state household dimension (latest known profile per household_id).
+      Grain: 1 row per household_id.
+      Purpose: Provides stable household attributes and geographic slicers for reporting and operational targeting.
+      Notes: This represents the “latest” household state based on the warehouse load timestamp logic upstream. For historical point-in-time analysis, use the SCD2 snapshot table instead of this current view.
+
+    config:
+      tags: ["mart", "dimension", "wash", "kobo"]
+
+    columns:
+      - name: household_id
+        description: |
+          Primary household business key captured in the survey.
+          Uniquely identifies a household in the warehouse and is the join key from household-event facts to the household dimension.
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+          - unique:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: ward_id
+        description: |
+          Ward identifier for the household’s latest known location/state.
+          Main geographic slicer for ward-level WASH reporting and operational targeting.
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: municipality
+        description: |
+          Municipality associated with the household’s latest known location/state.
+          Used as a higher-level geographic slicer above ward (e.g., municipality summaries, rollups, and filtering).
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true
+
+      - name: district
+        description: |
+          District associated with the household’s latest known location/state.
+          Used for district-level rollups and broader geographic disaggregation in reporting.
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                store_failures: true

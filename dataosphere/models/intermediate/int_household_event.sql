@@ -16,7 +16,8 @@ with joined as (
         hh.hh_size_reported,
         hh.water_filter_type,
         hh.primary_water_source,
-        hh.has_toilet
+        hh.has_toilet,
+        ss.record_loaded_at
     from
         {{ ref('stg_kobo_household') }} as hh
     join
