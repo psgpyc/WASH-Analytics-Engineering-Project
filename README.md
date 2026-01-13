@@ -96,37 +96,23 @@ dataosphere/
 ### High level flow
 
 ```mermaid
-flowchart LR
-  RAW[(RAW)]
-  STG[STAGING: stg_*]
-  INT[INTERMEDIATE: int_*]
-  MARTS[ARTS: dim_ / fact_]
-  MON[MONITORING: mon_*]
-  SNAP[SNAPSHOTS: SCD2 history]
-
-  RAW --> STG --> INT --> MARTS
-  STG --> MON
-  INT --> MON
-  MARTS --> MON
-  INT --> SNAP
-```
-
-### What each layer is responsible for
-
-```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 70, "rankSpacing": 90}, "themeVariables": {"fontSize": "16px"}}}%%
 flowchart TB
-  A[RAW\n"As received"] --> B[STAGING\n"Make it usable"]
-  B --> C[INTERMEDIATE\n"Make it analytic"]
-  C --> D[MARTS\n"Make it BI-ready"]
-  B --> E[REJECTED\n"Keep bad rows inspectable"]
-  E --> F[MONITORING\n"Track what broke and why"]
-  C --> G[SNAPSHOTS\n"SCD2 history for household attributes"]
 
-  classDef layer fill:#111827,stroke:#9CA3AF,color:#E5E7EB;
-  class B,C,D,E,F,G layer;
+  RAW["RAW<br/>Existing Snowflake RAW tables<br/>(sources.yml = metadata + freshness expectations)"]
+  STG["STAGING (stg_)<br/>- safe casts to stable types<br/>- trim/lower + canonical sets<br/>- dedupe to declared grains<br/>- DQ flags + __rejected outputs"]
+  INT["INTERMEDIATE (int_)<br/>- submitted-only filters<br/>- household event joins (household × submission)<br/>- member health rollups (household × submission)<br/>- KPI input shaping"]
+  MRT["MARTS (dim_ / fact_)<br/>- BI-ready facts + aggregates<br/>- KPI flags + safe drinking classification<br/>- ward/day rollups"]
+  REJ["REJECTED / QUARANTINE (__rejected)<br/>Bad rows retained for triage + replay<br/>(not silently dropped)"]
+  MON["MONITORING (mon_)<br/>- totals vs rejected by day/model<br/>- rejection rate by day/model<br/>- rejection reasons (reason_bucket)<br/>- unknown diarrhoea by ward/day"]
+  SNAP["SNAPSHOTS (snap_)<br/>SCD2 history for household attributes<br/>(point-in-time tracking)"]
+
+  RAW --> STG --> INT --> MRT
+  STG --> REJ --> MON
+  INT --> MON
+  MRT --> MON
+  SNAP --> MRT
 ```
-
----
 
 ## Modelling principles
 
@@ -151,7 +137,7 @@ Every model declares a grain and enforces it (unique tests / composite uniquenes
 ### 5) Monitoring is part of the system
 If a stakeholder asks “why did the KPI drop yesterday?”, I want monitoring tables that answer it without reading compiled SQL.
 
----
+
 
 ## Key contracts
 
