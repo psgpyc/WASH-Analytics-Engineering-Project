@@ -177,3 +177,58 @@ models:
               config:
                 severity: error
                 store_failures: true
+
+  - name: fact_household_wash_event_enriched_scd2
+    description: |
+      Household-event fact enriched with point-in-time household attributes from the SCD2 household snapshot.
+      Grain: 1 row per (household_id, submission_id).
+      Purpose: Enables historically correct slicing of events by household attributes (filter/source/toilet/size, district/municipality)
+      as-of the event timestamp (event_ts).
+
+    config:
+      tags: ['marts', 'wash', 'kobo']
+
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            description: "Enforce declared grain: one enriched row per household survey event."
+            combination_of_columns:
+              - household_id
+              - submission_id
+          config:
+            severity: error
+            store_failures: true
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            description: |
+              Point-in-time join correctness: when a snapshot row is present, the event timestamp must fall within the snapshot validity window.
+            expression: >
+              dbt_valid_from is null
+              or (
+                submitted_at >= dbt_valid_from
+                and (dbt_valid_to is null or submitted_at < dbt_valid_to)
+              )
+          config:
+            severity: error
+            store_failures: true
+
+    columns:
+      - name: household_id
+        description: "Household identifier. Part of the primary key for the household-event grain."
+        data_tests:
+          - not_null:
+              config: {severity: error, store_failures: true}
+
+      - name: submission_id
+        description: "Submission identifier for the survey event. Part of the primary key for the household-event grain."
+        data_tests:
+          - not_null:
+              config: {severity: error, store_failures: true}
+
+      - name: dbt_valid_from
+        description: "Snapshot validity start timestamp for the household attributes row matched to the event."
+      - name: dbt_valid_to
+        description: "Snapshot validity end timestamp for the household attributes row matched to the event (null = current row)."
+
+    
