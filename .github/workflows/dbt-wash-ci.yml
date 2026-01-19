@@ -1,0 +1,67 @@
+name: dbt-wash CI
+
+on:
+  pull_request:
+    branches:
+      - master
+
+concurrency:
+  group: dbt-wash-ci-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DBT_PROJECT_DIR: dataosphere
+  DBT_PROFILES_DIR: ci
+  DBT_TARGET: "ci"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+      SF_USER: ${{ secrets.SF_USER }}
+      SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+      SF_ROLE: ${{ secrets.SF_ROLE }}
+      SF_WAREHOUSE: ${{ secrets.SF_WAREHOUSE }}
+      SF_DATABASE: ${{ secrets.SF_DATABASE }}
+      SF_SCHEMA: DBT_CI_PR_${{ github.event.pull_request.number }}
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ env.DBT_PROJECT_DIR }}
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Show versions
+        run: |
+          python --version
+          dbt --version
+
+      - name: dbt deps
+        run: dbt deps --profiles-dir ${{ env.DBT_PROFILES_DIR }}
+
+      - name: dbt debug
+        run: dbt debug --target ${{ env.DBT_TARGET }} --profiles-dir ${{ env.DBT_PROFILES_DIR }}
+
+      - name: dbt build
+        run: dbt build --target ${{ env.DBT_TARGET }} --profiles-dir ${{ env.DBT_PROFILES_DIR }}
