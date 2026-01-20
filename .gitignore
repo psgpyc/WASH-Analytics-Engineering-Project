@@ -5,6 +5,7 @@ target/
 dbt_packages/
 logs/
 
+
 # Compiled SQL (sometimes under target/ but keep safe if configured elsewhere)
 compiled/
 
@@ -20,6 +21,8 @@ profiles.yml
 .env.*
 secrets.*
 **/profiles.yml
+
+
 
 # -------------------------------------------------------------------
 # OS / Editor
@@ -58,3 +61,10 @@ yarn-error.log*
 infra/
 /infra/
 
+
+# -------------------------------------------------------------------
+# Exception
+# -------------------------------------------------------------------
+
+!dataosphere/ci/
+!dataosphere/ci/profiles.yml

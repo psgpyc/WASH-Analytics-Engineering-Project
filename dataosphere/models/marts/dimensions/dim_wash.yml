@@ -55,3 +55,43 @@ models:
               config:
                 severity: error
                 store_failures: true
+
+  - name: dbt_household_history
+    description: |
+      Full household SCD2 history derived from the snapshot.
+      One row per household version, with validity window [dbt_valid_from, dbt_valid_to).
+      Purpose: Enables point-in-time analysis when you need historical attributes aligned to an event timestamp.
+
+    config:
+      tags: ["mart", "dimension", "wash", "kobo"]
+    
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            - combination_of_columns:
+              - household_id
+              - dbt_valid_from
+          config:
+            severity: warn
+            store_failures: true
+    
+
+    columns:
+      - name: household_id
+        description: "Primary business key for the household"
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+                store_failures: true
+      
+      - name: dbt_valid_from
+        description: Version start timestamp (inclusive).
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+                store_failures: true
+
+      - name: dbt_valid_to
+        description: Version end timestamp (exclusive). Null means the row is current.

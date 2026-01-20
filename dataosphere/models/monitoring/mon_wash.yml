@@ -239,7 +239,7 @@ models:
       - dbt_utils.expression_is_true:
           arguments:
             description: "Sanity check: unknown rate must fall between 0 and 1 (inclusive)."
-            expression: "rejection_rate between 0 and 1"
+            expression: "unknown_rate between 0 and 1"
           config:
             severity: warn
             store_failures: true
