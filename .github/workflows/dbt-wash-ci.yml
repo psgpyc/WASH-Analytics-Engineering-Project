@@ -61,8 +61,7 @@ jobs:
         run: |
           pwd
           ls -la
-          ls -la dataosphere
-          ls -la dataosphere/ci
+          ls -la ./ci
 
       - name: dbt deps
         run: dbt deps --profiles-dir ${{ env.DBT_PROFILES_DIR }}
