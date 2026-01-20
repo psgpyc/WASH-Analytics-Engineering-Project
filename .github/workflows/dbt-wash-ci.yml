@@ -13,7 +13,6 @@ permissions:
   contents: read
 
 env:
-  DBT_PROJECT_DIR: dataosphere
   DBT_PROFILES_DIR: ci
   DBT_TARGET: "ci"
   PYTHON_VERSION: "3.11"
@@ -35,7 +34,7 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: ${{ env.DBT_PROJECT_DIR }}
+        working-directory: dataosphere
 
     steps:
       - name: Checkout PR branch
@@ -57,6 +56,13 @@ jobs:
         run: |
           python --version
           dbt --version
+
+      - name: Debug workspace
+        run: |
+          pwd
+          ls -la
+          ls -la dataosphere
+          ls -la dataosphere/ci
 
       - name: dbt deps
         run: dbt deps --profiles-dir ${{ env.DBT_PROFILES_DIR }}
