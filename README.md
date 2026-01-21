@@ -1,102 +1,86 @@
-# WASH: Analytics Engineering Project 
+# WASH: Analytics Engineering Project, Modelling Kobo-style survey data in Snowflake using dbt.
 
-Contract-first analytics engineering project modelling Kobo-style WASH survey data in **Snowflake** using **dbt**.
+This repo is intentionally “production-shaped”. 
 
-This repo is intentionally “production-shaped”: it assumes the RAW tables already exist in Snowflake, and focuses on what an analytics engineer does next — standardise, validate, quarantine, integrate, publish marts, and monitor.
+It assumes the RAW tables already exist in Snowflake, and focuses on what an analytics engineer does next — standardise, validate, quarantine, integrate, publish marts, and monitor.
 
--- 
+## Problem Statement
 
-A programme team running a Kobo-based WASH survey already had RAW tables landing in Snowflake, but they needed reporting that was consistent and explainable day to day. The ask was straightforward: take what is arriving in RAW and turn it into something they can safely use for routine monitoring and decision-making.
+A programme team running a Kobo-based WASH survey already had RAW tables landing in Snowflake, but they needed reporting that was consistent and explainable day to day. 
 
-They wanted one primary KPI they could trust and trend daily:
+> The ask was straightforward: take what is arriving in RAW and turn it into something they can safely use for routine monitoring and decision-making.
+
+They wanted one primary KPI they could trust and trend:
 
 > [!IMPORTANT]
 > Primary KPI: Safe drinking water by ward and day.
 
-They also wanted to answer practical questions when the numbers moved:
+Additionally, they also wanted to answer practical questions when the numbers moved:
+
 - What changed since the last survey round, and which wards are driving it?
-- What kinds of issues are showing up most often in the field data (missing keys, invalid categoricals, orphan relationships, out-of-range values)?
-- How frequently are default or placeholder values being used for required fields, and is that concentrated in specific wards or teams?
-- Are health outcomes being recorded as “unknown” more often in certain wards or by certain enumerators, making those slices less reliable for reporting?
+
+- What kinds of issues are showing up most often in the field data collection (missing keys, invalid categoricals, orphan relationships, out-of-range values, unknown)?
+
 
 ## Workflow
 
 I treated this as an analytics engineering problem. The goal was to make the KPI deterministic, auditable, and resilient to messy, event-scoped survey data.
 
+<img width="878" height="396" alt="image" src="https://github.com/user-attachments/assets/05c5ab05-cb46-4823-be4a-c368abe52563" />
+
 
 Here is the approach I followed:
 
 1) **Stakeholder Alignment**
-   - Confirm what “safe drinking water” means in their programme context (safe source, safe filter/treatment).
-   - Agree how to treat “unknown” values, especially for health outcomes.
+  To Lock down business meaning, so the KPI stays consistent.
+
+   - Confirm what “safe drinking water” means in their programme context? What water sources and filtration methods are considered safe?
+   - Agree on how to treat missing/“unknown” values, especially for KPI-critical fields and health outcomes.
    - Agree the reporting time basis that we can guarantee consistently in the warehouse.
    - Agree what should be excluded from downstream reporting.
+   - Align on **late-arriving data** expectations and how far back is the lookback window.  
+   - Define **survey versioning rules**. How value sets change between survery rounds are handeled, and how it is reported.  
+   - Confirm output expectations: required tables, required dimensions, and what “success” looks like for reporting.
 
 2) **Data definition**
+   Make the KPI computable and repeatable by defining it in warehouse terms.
+
    - Fix the KPI grain.
+   - Define the KPI **unit of analysis** and the primary key used for counting.  
    - Define which slicers must work everywhere and what “eligible” means for counting.
-   - Write the KPI logic in a way that is deterministic and doesn’t rely on BI tool calculations.
+   - Define how to handle unknowns and missing values in KPI-critical fields.  
+   - Define dedupe rules.  
+   - Define any required time windows
+   - Specify the output contract for the KPI table (expected columns, types, and meaning)
 
 3) **Data contracts**
+  Turn assumptions into versioned documentation to make changes intentional and reviewable
+
    - Document canonical value sets, values allowed downstream.
    - Document the “safe lists” that define the KPI.
-   - Document the rollup rules, including strict tri-state handling (`unknown` is not treated as `no`).
-   - Put all of this in `docs/data-contract.md` so changes are intentional and reviewable.
+   - Document the rollup rules, including strict tri-state handling.
+   - Specify the contract for rejected/quarantined data.
 
-4) **Build the dbt layers with guardrails**
+4) **Build the dbt layers**
+  Standardise, validate, quarantine, integrate, then publish marts that BI can use.
+
+  <img width="878" height="658" alt="image" src="https://github.com/user-attachments/assets/f06d238a-04c7-4f6f-a4ba-277ff8fe3a0f" />
+
+
    - **Staging (`stg_`)** standardises types and categoricals, enforces grains, and generates DQ flags.
    - **Quarantine (`__rejected`)** keeps bad rows visible and replayable without letting them pollute marts.
    - **Intermediate (`int_`)** produces join-safe integration models and rollups at stable grains.
    - **Marts (`fact_` / `dim_`)** publish KPI-ready outputs so downstream dashboards stay simple and consistent.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│   RAW (Snowflake)                                                      │
-│        │                                                               │
-│        v                                                               │
-│   STAGING (stg_*)                                                      │
-│   - safe casting + trimming/lower                                      │
-│   - canonicalisation (value sets)                                      │
-│   - dedupe to declared grains (record_loaded_at + tie-break)           │
-│   - DQ flags                                                           │
-│        │                                                               │
-│        ├──────────────>  __rejected / quarantine                       │
-│        │                 - bad rows retained. Inspectable & replayable │
-│        │                 - reason buckets derived with precedence      │
-│        │                                                               │
-│        v                                                               │
-│   INTERMEDIATE (int_*)                                                 │
-│   - join-safe integration models                                       │
-│   - stable grains for downstream marts (household_id × submission_id)  │
-│        │                                                               │
-│        ├──────────────>  int_household_current_source                  │
-│        │                 - 1 row per household_id                      │
-│        │                                                               │
-│        v                                                               │                     
-|   SNAPSHOTS (snap_*)  [SCD2]                                           │                     
-│   - snap_dim_household_current                                         │                      
-│   - tracks household attribute history                                 │
-│        │                                                               │                      
-│        ├──────────────>  Point-in-time join models                     │                      
-│        │                                                               │                      
-│        │                                                               │                      
-│        v                                                               │                      │                                                                        │                      
-│   MARTS (fact_* / dim_*)                                               │                      
-│   - fact_household_wash_event (event grain, KPI flags)                 │                      
-│   - aggregates (ward/day KPI rollups)                                  │                      
-│   - dim_household_current                                              │
-│                                                                        │                      
-└────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    v
-  ┌────────────────────────────────────────────────────────────────────┐
-  │ Monitoring                                                         │
-  │  - totals, rejections, rejection rate                              │
-  │  - rejection by reason bucket                                      │
-  │  - unknown rates by ward/day                                       │
-  └───────────────-────────────────────────────────────────────────────┘
+5) **Monitoring and observability**  
+   Add ongoing checks so data drift and quality issues show up early, not after dashboards break.  
 
-```
+   - Publish monitoring models for freshness, volume changes, and rejection rates by model/day.  
+   - Track top rejection reasons (missing keys, invalid categoricals, orphan relationships, out-of-range values).  
+   - Monitor “unknown” rates for KPI-critical fields so KPI movement is explainable.  
+   - Surface these signals in CI and in warehouse tables so issues are caught before reporting.
+
+
 
 The result is a KPI that is repeatable, auditable, and explainable: the definition is written down, enforced with tests, and supported by monitoring outputs so stakeholders can understand changes instead of guessing.
 
@@ -202,9 +186,22 @@ Final KPI:
 
 ## Published marts
 
+Repo structure (from `models/marts/`):
+- `marts/dimensions/`
+  - `dim_household_current.sql`
+  - `dim_household_history.sql`
+  - `dim_wash.yml` (docs + tests for dims)
+- `marts/facts/`
+  - `fact_household_wash_event.sql`
+  - `fact_household_wash_event_enriched_scd2.sql`
+  - `fact_agg_safe_drinking_ward_day.sql`
+  - `fact_wash.yml` (docs + tests for facts)
+
+---
+
 ### `fact_household_wash_event`
 Purpose:
-- KPI-ready household-event table for safe drinking water reporting.
+- KPI-ready household-event fact table used as the base for safe drinking water reporting.
 
 Grain:
 - `household_id × submission_id`
@@ -216,33 +213,52 @@ Guaranteed slicers:
 Eligibility:
 - `member_count >= 1`
 
-Contract invariant (enforced by tests):
+Contract invariant:
 - `is_safe_drinking = has_safe_primary_source AND has_safe_water_filter AND has_no_diarrhoea_14d_members`
 
+---
 
-### `fact_agg_safe_drinking_ward_day`
+### `fact_household_wash_event_enriched_scd2`
 Purpose:
-- daily ward-level aggregate so BI tools don’t have to rebuild KPI logic.
-
-Grain:
-- `ward_id × event_date`
-
-Must always be true:
-- `household_events_safe <= household_events_total`
-- `pct_safe between 0 and 1`
-
-
-### `dim_household_current`
-Purpose:
-- current household attributes (latest known values), built as a “current view” of event-scoped household captures.
+- Event fact enriched with household attributes as-of the event date using SCD2 history (point-in-time correct).
 
 Grain:
 - `household_id`
 
-Usage note:
-- joining event facts to current dim answers **current state** questions  
-- it does not represent historical attribute values at the time of each event unless you do a point-in-time join via the snapshot table
+---
 
+### `fact_agg_safe_drinking_ward_day`
+Purpose:
+- Daily ward-level aggregate so BI tools do not have to rebuild KPI logic.
+
+Grain:
+- `ward_id × event_date`
+
+Must always be true (enforced by tests):
+- `household_events_safe <= household_events_total`
+- `pct_safe between 0 and 1`
+
+---
+
+### `dim_household_current`
+Purpose:
+- Current household attributes (latest known values), built as a “current view” of event-scoped household captures.
+
+Grain:
+- `household_id`
+
+---
+
+### `dim_household_history`
+Purpose:
+- Household attribute history as an SCD2 dimension (tracks how household attributes change over time).
+
+Grain:
+- `household_id × valid_from` (SCD2-style history)
+
+Usage note:
+- Enables point-in-time joins (either directly, or via `fact_household_wash_event_enriched_scd2`).
+- Useful for “what changed over time” analysis and cohort-style comparisons.
 
 ## Snapshots (SCD2 household history)
 
@@ -251,12 +267,6 @@ This repo includes a dbt snapshot to track household attribute changes over time
 ### What it’s for
 - keep history of attribute changes (filter type, source type, toilet status, reported size, and location fields)
 - enable point-in-time analysis when needed
-
-Operationally:
-- new RAW arrives
-- you run dbt models (stg/int/marts)
-- you run `dbt snapshot`
-- snapshot compares current source rows and inserts new SCD2 versions when changes occur
 
 ---
 
