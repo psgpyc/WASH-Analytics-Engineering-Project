@@ -22,7 +22,10 @@ select
     water_filter_type, 
     primary_water_source,
     -- audit/lineage
-    submission_id
+    submission_id,
+    dbt_valid_to,
+    dbt_valid_from
+
 from
     source
 where

@@ -17,7 +17,7 @@ They wanted one primary KPI they could trust and trend:
 
 Additionally, they also wanted to answer practical questions when the numbers moved:
 
-- What changed since the last survey round, and which wards are driving it?
+- What changed since the last survey round, and which ward(sectors) are driving it?
 
 - What kinds of issues are showing up most often in the field data collection (missing keys, invalid categoricals, orphan relationships, out-of-range values, unknown)?
 
@@ -32,7 +32,6 @@ I treated this as an analytics engineering problem. The goal was to make the KPI
 Here is the approach I followed:
 
 1) **Stakeholder Alignment**
-  To Lock down business meaning, so the KPI stays consistent.
 
    - Confirm what “safe drinking water” means in their programme context? What water sources and filtration methods are considered safe?
    - Agree on how to treat missing/“unknown” values, especially for KPI-critical fields and health outcomes.
@@ -43,7 +42,6 @@ Here is the approach I followed:
    - Confirm output expectations: required tables, required dimensions, and what “success” looks like for reporting.
 
 2) **Data definition**
-   Make the KPI computable and repeatable by defining it in warehouse terms.
 
    - Fix the KPI grain.
    - Define the KPI **unit of analysis** and the primary key used for counting.  
@@ -54,7 +52,6 @@ Here is the approach I followed:
    - Specify the output contract for the KPI table (expected columns, types, and meaning)
 
 3) **Data contracts**
-  Turn assumptions into versioned documentation to make changes intentional and reviewable
 
    - Document canonical value sets, values allowed downstream.
    - Document the “safe lists” that define the KPI.
@@ -62,7 +59,6 @@ Here is the approach I followed:
    - Specify the contract for rejected/quarantined data.
 
 4) **Build the dbt layers**
-  Standardise, validate, quarantine, integrate, then publish marts that BI can use.
 
   <img width="878" height="658" alt="image" src="https://github.com/user-attachments/assets/f06d238a-04c7-4f6f-a4ba-277ff8fe3a0f" />
 
@@ -73,7 +69,6 @@ Here is the approach I followed:
    - **Marts (`fact_` / `dim_`)** publish KPI-ready outputs so downstream dashboards stay simple and consistent.
 
 5) **Monitoring and observability**  
-   Add ongoing checks so data drift and quality issues show up early, not after dashboards break.  
 
    - Publish monitoring models for freshness, volume changes, and rejection rates by model/day.  
    - Track top rejection reasons (missing keys, invalid categoricals, orphan relationships, out-of-range values).  
