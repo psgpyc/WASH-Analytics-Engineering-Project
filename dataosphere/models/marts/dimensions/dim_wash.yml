@@ -56,7 +56,7 @@ models:
                 severity: error
                 store_failures: true
 
-  - name: dbt_household_history
+  - name: dim_household_history
     description: |
       Full household SCD2 history derived from the snapshot.
       One row per household version, with validity window [dbt_valid_from, dbt_valid_to).
@@ -68,7 +68,7 @@ models:
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
-            - combination_of_columns:
+            combination_of_columns:
               - household_id
               - dbt_valid_from
           config:

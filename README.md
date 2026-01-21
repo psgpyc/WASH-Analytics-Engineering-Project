@@ -1,48 +1,92 @@
-# WASH Analytics Engineering (dbt + Snowflake)
+[![dbt CI](https://github.com/psgpyc/survey-analytics-engineering-wash/actions/workflows/dbt-wash-ci.yml/badge.svg)](https://github.com/psgpyc/survey-analytics-engineering-wash/actions/workflows/dbt-wash-ci.yml)
+[![dbt Docs Publish](https://github.com/psgpyc/survey-analytics-engineering-wash/actions/workflows/dbt-docs-pages.yml/badge.svg)](https://github.com/psgpyc/survey-analytics-engineering-wash/actions/workflows/dbt-docs-pages.yml)
 
-Contract-first analytics engineering project modelling Kobo-style WASH survey data in **Snowflake** using **dbt**.
+[![dbt docs](https://img.shields.io/badge/dbt%20docs-live-brightgreen)](https://psgpyc.github.io/survey-analytics-engineering-wash/)
 
-This repo is intentionally “production-shaped”: it assumes the RAW tables already exist in Snowflake, and focuses on what an analytics engineer does next — standardise, validate, quarantine, integrate, publish marts, and monitor.
 
----
+> Live dbt Docs: https://psgpyc.github.io/survey-analytics-engineering-wash/
 
-## Table of contents
+# WASH: Analytics Engineering Project, Modelling Kobo-style survey data in Snowflake using dbt.
 
-- [What this repo is](#what-this-repo-is)
-- [The data domain](#the-data-domain)
-- [Repository structure](#repository-structure)
-- [Architecture overview](#architecture-overview)
-- [Modelling principles](#modelling-principles)
-- [Key contracts](#key-contracts)
-- [Published marts](#published-marts)
-- [Snapshots (SCD2 history)](#snapshots-scd2-household-history)
-- [Monitoring and triage](#monitoring-and-triage)
-- [How to run](#how-to-run)
-- [How to review changes](#how-to-review-changes)
-- [What I’d do next](#what-id-do-next)
-- [Licence](#licence)
+This repo is intentionally “production-shaped”. 
 
----
+It assumes the RAW tables already exist in Snowflake, and focuses on what an analytics engineer does next — standardise, validate, quarantine, integrate, publish marts, and monitor.
 
-## What this repo is
+## Problem Statement
 
-Survey data breaks in predictable ways:
-- repeated submissions over time
-- inconsistent categoricals (`tapstand` vs `public_tap_standpipe`)
-- missing keys and orphan foreign keys
-- “unknown” answers that are meaningful (especially for health outcomes)
-- soft-deleted records that should not flow downstream
+A programme team running a Kobo-based WASH survey already had RAW tables landing in Snowflake, but they needed reporting that was consistent and explainable day to day. 
 
-This project shows how I deal with that as an analytics engineer:
+> The ask was straightforward: take what is arriving in RAW and turn it into something they can safely use for routine monitoring and decision-making.
 
-1) define the rules explicitly (contracts + canonical sets + KPI definition)  
-2) enforce them in staging (typed, canonicalised, deduped, tested)  
-3) quarantine bad records while keeping them inspectable (`__rejected`)  
-4) build intermediate integration models with stable grains  
-5) publish marts that BI tools can use without rebuilding KPI logic  
-6) create monitoring tables so debugging is fast and repeatable  
+They wanted one primary KPI they could trust and trend:
 
----
+> [!IMPORTANT]
+> Primary KPI: Safe drinking water by ward and day.
+
+Additionally, they also wanted to answer practical questions when the numbers moved:
+
+- What changed since the last survey round, and which ward(sectors) are driving it?
+
+- What kinds of issues are showing up most often in the field data collection (missing keys, invalid categoricals, orphan relationships, out-of-range values, unknown)?
+
+
+## Workflow
+
+I treated this as an analytics engineering problem. The goal was to make the KPI deterministic, auditable, and resilient to messy, event-scoped survey data.
+
+<img width="878" height="396" alt="image" src="https://github.com/user-attachments/assets/05c5ab05-cb46-4823-be4a-c368abe52563" />
+
+
+Here is the approach I followed:
+
+1) **Stakeholder Alignment**
+
+   - Confirm what “safe drinking water” means in their programme context? What water sources and filtration methods are considered safe?
+   - Agree on how to treat missing/“unknown” values, especially for KPI-critical fields and health outcomes.
+   - Agree the reporting time basis that we can guarantee consistently in the warehouse.
+   - Agree what should be excluded from downstream reporting.
+   - Align on **late-arriving data** expectations and how far back is the lookback window.  
+   - Define **survey versioning rules**. How value sets change between survery rounds are handeled, and how it is reported.  
+   - Confirm output expectations: required tables, required dimensions, and what “success” looks like for reporting.
+
+2) **Data definition**
+
+   - Fix the KPI grain.
+   - Define the KPI **unit of analysis** and the primary key used for counting.  
+   - Define which slicers must work everywhere and what “eligible” means for counting.
+   - Define how to handle unknowns and missing values in KPI-critical fields.  
+   - Define dedupe rules.  
+   - Define any required time windows
+   - Specify the output contract for the KPI table (expected columns, types, and meaning)
+
+3) **Data contracts**
+
+   - Document canonical value sets, values allowed downstream.
+   - Document the “safe lists” that define the KPI.
+   - Document the rollup rules, including strict tri-state handling.
+   - Specify the contract for rejected/quarantined data.
+
+4) **Build the dbt layers**
+
+  <img width="878" height="658" alt="image" src="https://github.com/user-attachments/assets/f06d238a-04c7-4f6f-a4ba-277ff8fe3a0f" />
+
+
+   - **Staging (`stg_`)** standardises types and categoricals, enforces grains, and generates DQ flags.
+   - **Quarantine (`__rejected`)** keeps bad rows visible and replayable without letting them pollute marts.
+   - **Intermediate (`int_`)** produces join-safe integration models and rollups at stable grains.
+   - **Marts (`fact_` / `dim_`)** publish KPI-ready outputs so downstream dashboards stay simple and consistent.
+
+5) **Monitoring and observability**  
+
+   - Publish monitoring models for freshness, volume changes, and rejection rates by model/day.  
+   - Track top rejection reasons (missing keys, invalid categoricals, orphan relationships, out-of-range values).  
+   - Monitor “unknown” rates for KPI-critical fields so KPI movement is explainable.  
+   - Surface these signals in CI and in warehouse tables so issues are caught before reporting.
+
+
+
+The result is a KPI that is repeatable, auditable, and explainable: the definition is written down, enforced with tests, and supported by monitoring outputs so stakeholders can understand changes instead of guessing.
+
 
 ## The data domain
 
@@ -64,9 +108,7 @@ The RAW tables represent a Kobo-style form structure:
   - observations of water points
   - grain is composite: `(water_point_id, submission_id)` (depending on form design)
 
-Important detail:
-- household data is **event-scoped**, not a master registry
-- the same `household_id` can appear across multiple submissions (updates, re-visits, surveys over time)
+<img width="1313" height="641" alt="image" src="https://github.com/user-attachments/assets/7fe9e779-52ac-4f1c-b3e0-fd6988059e9a" />
 
 ---
 
@@ -86,31 +128,6 @@ dataosphere/
     data-contract.md
     monitoring-contract.md
 ```
-
-## Modelling principles
-
-### 1) Contract-first
-- Canonical sets define what values are allowed downstream.
-- KPI rules are written once (contract + macros) and enforced via dbt tests.
-
-### 2) Join-safe grains
-Every model declares a grain and enforces it (unique tests / composite uniqueness).
-- if a model is meant to be 1 row per key, it must prove it
-
-### 3) Deterministic transformations
-- safe casting
-- trimming/lowercasing strings
-- standardised timestamps
-- dedupe ordering based on lineage (`record_loaded_at`, plus a tie-breaker)
-
-### 4) Accountability 
-- `store_failures` enabled so failures land in audit tables
-- `__rejected` models retain bad rows for inspection and replay
-
-### 5) Monitoring is part of the system
-If a stakeholder asks “why did the KPI drop yesterday?”, I want monitoring tables that answer it without reading compiled SQL.
-
-
 
 ## Key contracts
 
@@ -138,9 +155,6 @@ For this project’s reporting and monitoring:
 - event date: `event_date = DATE(record_loaded_at)`
 - default reporting grain: `ward_id × event_date`
 - timezone: treat as UTC (or convert before deriving date)
-
-Reason:
-- it is deterministic and always present for warehouse-side reporting in this setup
 
 
 ## KPI: Safe drinking water (household-event)
@@ -175,9 +189,22 @@ Final KPI:
 
 ## Published marts
 
+Repo structure (from `models/marts/`):
+- `marts/dimensions/`
+  - `dim_household_current.sql`
+  - `dim_household_history.sql`
+  - `dim_wash.yml` (docs + tests for dims)
+- `marts/facts/`
+  - `fact_household_wash_event.sql`
+  - `fact_household_wash_event_enriched_scd2.sql`
+  - `fact_agg_safe_drinking_ward_day.sql`
+  - `fact_wash.yml` (docs + tests for facts)
+
+---
+
 ### `fact_household_wash_event`
 Purpose:
-- KPI-ready household-event table for safe drinking water reporting.
+- KPI-ready household-event fact table used as the base for safe drinking water reporting.
 
 Grain:
 - `household_id × submission_id`
@@ -189,33 +216,52 @@ Guaranteed slicers:
 Eligibility:
 - `member_count >= 1`
 
-Contract invariant (enforced by tests):
+Contract invariant:
 - `is_safe_drinking = has_safe_primary_source AND has_safe_water_filter AND has_no_diarrhoea_14d_members`
 
+---
 
-### `fact_agg_safe_drinking_ward_day`
+### `fact_household_wash_event_enriched_scd2`
 Purpose:
-- daily ward-level aggregate so BI tools don’t have to rebuild KPI logic.
-
-Grain:
-- `ward_id × event_date`
-
-Must always be true:
-- `household_events_safe <= household_events_total`
-- `pct_safe between 0 and 1`
-
-
-### `dim_household_current`
-Purpose:
-- current household attributes (latest known values), built as a “current view” of event-scoped household captures.
+- Event fact enriched with household attributes as-of the event date using SCD2 history (point-in-time correct).
 
 Grain:
 - `household_id`
 
-Usage note:
-- joining event facts to current dim answers **current state** questions  
-- it does not represent historical attribute values at the time of each event unless you do a point-in-time join via the snapshot table
+---
 
+### `fact_agg_safe_drinking_ward_day`
+Purpose:
+- Daily ward-level aggregate so BI tools do not have to rebuild KPI logic.
+
+Grain:
+- `ward_id × event_date`
+
+Must always be true (enforced by tests):
+- `household_events_safe <= household_events_total`
+- `pct_safe between 0 and 1`
+
+---
+
+### `dim_household_current`
+Purpose:
+- Current household attributes (latest known values), built as a “current view” of event-scoped household captures.
+
+Grain:
+- `household_id`
+
+---
+
+### `dim_household_history`
+Purpose:
+- Household attribute history as an SCD2 dimension (tracks how household attributes change over time).
+
+Grain:
+- `household_id × valid_from` (SCD2-style history)
+
+Usage note:
+- Enables point-in-time joins (either directly, or via `fact_household_wash_event_enriched_scd2`).
+- Useful for “what changed over time” analysis and cohort-style comparisons.
 
 ## Snapshots (SCD2 household history)
 
@@ -224,12 +270,6 @@ This repo includes a dbt snapshot to track household attribute changes over time
 ### What it’s for
 - keep history of attribute changes (filter type, source type, toilet status, reported size, and location fields)
 - enable point-in-time analysis when needed
-
-Operationally:
-- new RAW arrives
-- you run dbt models (stg/int/marts)
-- you run `dbt snapshot`
-- snapshot compares current source rows and inserts new SCD2 versions when changes occur
 
 ---
 
@@ -305,27 +345,21 @@ This repo is designed to make changes reviewable:
   - macros for safe lists
   - dbt tests that lock invariants
 
-So if someone changes:
-- canonical sets
-- safe lists
-- diarrhoea rollup logic
-- time basis
-
-…the PR should include:
-- contract update
-- macro update (if applicable)
-- test update (so drift is caught immediately)
-
 ---
 
-## What I’d do next
+### CI on pull requests 
+- On every PR to `master`, CI runs:
+  - `dbt deps`
+  - `dbt debug`
+  - `dbt build` for selected layers (staging / intermediate / marts / monitoring)
+- CI writes to an isolated Snowflake schema per PR:
+  - `DBT_CI_PR_<pr_number>`
+- CI uses an env-var driven dbt profile stored in `dataosphere/ci/` .
 
-- CI/CD with `dbt build` + tests on PRs (selectors + slim CI)
-- environment separation (dev/test/prod)
-- documentation site generation (dbt docs + links to contracts)
-- alerting thresholds for monitoring (rejection spikes, unknown diarrhoea spikes)
+### Docs published to GitHub Pages
+- On every push to `master`, the workflow generates dbt docs and publishes them to GitHub Pages.
+- This keeps documentation always up to date with the latest merged definitions (models, tests, exposures, contracts).
 
----
 
 ## Licence
 

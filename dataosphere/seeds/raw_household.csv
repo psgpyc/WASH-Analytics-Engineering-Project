@@ -1,4 +1,0 @@
-household_id,ward_id,household_size,gps_lat,gps_lon
-hh_001,ward_07,5,27.7172,85.3240
-hh_002,ward_07,3,27.7000,85.3000
-hh_003,ward_02,6,27.6710,85.4298

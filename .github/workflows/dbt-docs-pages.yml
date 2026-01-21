@@ -1,0 +1,90 @@
+name: dbt Docs and GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch: {}
+
+concurrency:
+  group: dbt-docs-pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  DBT_PROFILES_DIR: ci
+  DBT_TARGET: "ci"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+      SF_USER: ${{ secrets.SF_USER }}
+      SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+      SF_ROLE: ${{ secrets.SF_ROLE }}
+      SF_WAREHOUSE: ${{ secrets.SF_WAREHOUSE }}
+      SF_DATABASE: ${{ secrets.SF_DATABASE }}
+      SF_SCHEMA: DBT_DOCS
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: dataosphere
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ../requirements.txt
+          pip check
+
+      - name: dbt deps
+        run: dbt deps --profiles-dir ${{ env.DBT_PROFILES_DIR }}
+
+      - name: dbt debug
+        run: dbt debug --target ${{ env.DBT_TARGET }} --profiles-dir ${{ env.DBT_PROFILES_DIR }}
+
+      - name: dbt docs generate
+        run: dbt docs generate --target ${{ env.DBT_TARGET }} --profiles-dir ${{ env.DBT_PROFILES_DIR }}
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Verify dbt docs output exists
+        run: |
+          pwd
+          ls -la
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dataosphere/target
+
+  deploy:
+    needs: build-docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

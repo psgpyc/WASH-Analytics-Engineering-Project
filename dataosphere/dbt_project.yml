@@ -1,33 +1,96 @@
-name: 'dataosphere'
-version: '1.0.0'
-profile: 'dataosphere'
+name: "dataosphere"
+version: "1.0.0"
+config-version: 2
 
+profile: "dataosphere"
+
+# ----------------------------
+# Paths
+# ----------------------------
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
 seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
+docs-paths: ["docs"]
 
-clean-targets:         # directories to be removed by `dbt clean`
+# ----------------------------
+# Build artefacts
+# ----------------------------
+target-path: "target"
+clean-targets:
   - "target"
   - "dbt_packages"
+  - "logs"
 
+# ----------------------------
+# Variables 
+# ----------------------------
+vars:
+  wash_project: true
+
+# ----------------------------
+# Snapshots
+# ----------------------------
 snapshots:
-  dataosphere:          
-    +schema: snapshots  
-    +tags: ['snapshot', 'wash', 'kobo']
+  dataosphere:
+    +schema: snapshots
+    +tags: ["snapshot", "wash", "kobo"]
 
+# ----------------------------
+# Models
+# ----------------------------
 models:
   dataosphere:
+    # Global defaults
+    +persist_docs:
+      relation: true
+      columns: true
+    +tags: ["wash", "kobo"]
+
     staging:
       +materialized: view
-      +tags: ["wash"]
       +schema: stage
+      +tags: ["staging"]
 
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+      +tags: ["intermediate"]
 
+    marts:
+      +schema: marts
+      +tags: ["mart"]
 
+      dimensions:
+        +materialized: table
+        +schema: marts
+        +tags: ["dim"]
 
-    
+      facts:
+        +materialized: table
+        +schema: marts
+        +tags: ["fact"]
 
+    monitoring:
+      +materialized: table
+      +schema: monitoring
+      +tags: ["monitoring"]
 
+# ----------------------------
+# Tests 
+# ----------------------------
+tests:
+  dataosphere:
+    +store_failures: true
+    +schema: dbt_test__audit
+    +severity: error
+
+# ----------------------------
+# Hooks 
+# ----------------------------
+# on-run-start:
+#   - "{{ log('Starting dbt run', info=True) }}"
+# on-run-end:
+#   - "{{ log('Finished dbt run', info=True) }}"
