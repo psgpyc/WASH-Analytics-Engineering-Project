@@ -70,7 +70,7 @@ Here is the approach I followed:
 
 4) **Build the dbt layers**
 
-  <img width="878" height="658" alt="image" src="https://github.com/user-attachments/assets/f06d238a-04c7-4f6f-a4ba-277ff8fe3a0f" />
+   <img width="659" height="526" alt="image" src="https://github.com/user-attachments/assets/02f84dc6-70c1-4661-adee-74f9ea75702a" />
 
 
    - **Staging (`stg_`)** standardises types and categoricals, enforces grains, and generates DQ flags.
