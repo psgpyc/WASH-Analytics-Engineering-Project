@@ -1,7 +1,9 @@
 {{
     config(
-        materialized='view',
-        schema='intermediate'
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key=['household_id', 'submission_id'],
+        on_schema_change='sync_all_columns'
     )
 }}
 
@@ -25,5 +27,13 @@ with joined as (
     on
         hh.submission_id = ss.submission_id
     
+), filtered as (
+    select  
+        *
+    from
+        joined
+    {% if is_incremental() %}
+        where {{ wash_incremental_load_filter(load_col='record_loaded_at')}}
+    {% endif %}
 )
-select * from joined
+select * from filtered

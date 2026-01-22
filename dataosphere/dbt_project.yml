@@ -29,6 +29,8 @@ clean-targets:
 # ----------------------------
 vars:
   wash_project: true
+  wash_event_lookback_days: 30
+  wash_load_lookback_days: 7
 
 # ----------------------------
 # Snapshots
