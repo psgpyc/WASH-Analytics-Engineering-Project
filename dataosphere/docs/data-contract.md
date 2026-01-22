@@ -217,8 +217,20 @@ We report using one timestamp so period-based indicators stay consistent.
 - default reporting grain: ward_id × event_date
 - timezone: treat as UTC, or convert to UTC before deriving event_date
 
-Eligibility rule
-- If event type is submitted and submitted_at is null, the row is not eligible for period reporting and must be quarantined or fixed upstream.
+Contract rule:
+- Submitted events must have `submitted_at` present. Rows missing `submitted_at` are rejected/quarantined.
+
+### 2.1 Late-arriving data policy
+
+Late-arriving data is expected (offline collection, delayed sync). This means a record may load today but belong to an older event_date.
+
+To keep event-time KPIs correct without full rebuilds, the pipeline uses a rolling lookback window:
+
+- Each run recomputes the last X days of event_date (based on `submitted_at`)
+- Each run also processes newly loaded records (based on `record_loaded_at`)
+
+Default lookback:
+- `event_lookback_days = 30` (can be tuned per programme cadence)
 
 ---
 
@@ -438,7 +450,7 @@ This repo supports both current-state consumption and historical point-in-time a
 
 ---
 
-### 7.3 Snapshot table: `snap_dim_household_current`
+### 7.3 Snapshot table: `snap_dim_household`
 
 **Purpose**
 - System-of-record for SCD2 history of household attributes.

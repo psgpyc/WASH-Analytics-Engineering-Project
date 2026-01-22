@@ -1,4 +1,4 @@
-{% snapshot snap_dim_household_current %}
+{% snapshot snap_dim_household %}
 
 {{
   config(

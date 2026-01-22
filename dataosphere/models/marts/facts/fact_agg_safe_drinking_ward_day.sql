@@ -1,9 +1,9 @@
-{{
-    config(
-        materialized='table',
-        schema='marts'
-    )
-}}
+{{ config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key=['ward_id','event_date'],
+    on_schema_change='sync_all_columns'
+) }}
 
 with base as (
     select *
@@ -22,4 +22,10 @@ grouped as (
     from base
     group by ward_id, event_date
 )
-select * from grouped
+select 
+    * 
+from 
+    grouped
+{% if is_incremental() %}
+where {{ wash_event_lookback_filter('event_date') }}
+{% endif %}

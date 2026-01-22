@@ -3,7 +3,7 @@ select
     dbt_valid_from, 
     dbt_valid_to
 from
-    {{ ref('snap_dim_household_current') }}
+    {{ ref('snap_dim_household') }}
 where
     dbt_valid_to is not null
     and dbt_valid_to <= dbt_valid_from

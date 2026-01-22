@@ -1,15 +1,39 @@
 {{
     config(
-        materialized='view',
-        schema='intermediate'
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key=['household_id', 'submission_id'],
+        on_schema_change='sync_all_columns'
     )
 
 }}
 
-with grouped as (
+with impacted_keys as (
+    select  
+        distinct household_id, submission_id
+    from
+        {{ ref('stg_kobo_member') }}
+    {% if is_incremental() %}
+        where {{ wash_incremental_load_filter(load_col='record_loaded_at') }}
+    {% endif %}
+),
+members_of_impacted as (
+    select
+        m.*
+    from    
+        {{ ref('stg_kobo_member') }} m
+    join
+        impacted_keys k
+    on
+        m.household_id = k.household_id
+        and m.submission_id = k.submission_id
+
+),
+grouped as (
     select
         household_id,
         submission_id,
+        max(record_loaded_at) as record_loaded_at,
         count(distinct member_index) as member_count,
         SUM(
             cast(member_had_diarrhoea_14d = 'yes' as number(1,0))
@@ -21,7 +45,7 @@ with grouped as (
             cast(member_had_diarrhoea_14d = 'unknown' as number(1,0))
         ) as total_unknown_diarrhoea_count_14d
     from
-        {{ ref('stg_kobo_member') }}
+        members_of_impacted
     group by
         household_id, submission_id
 

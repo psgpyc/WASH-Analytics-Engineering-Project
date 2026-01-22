@@ -1,9 +1,9 @@
-{{
-    config(
-        materialized='table',
-        schema='marts'
-    )
-}}
+{{ config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key=['household_id','submission_id'],
+    on_schema_change='sync_all_columns'
+) }}
 
 with source as (
     select
@@ -67,6 +67,10 @@ select
     *
 from
     final
+
 -- only selecting household_id x submission_id where atleast one member are present
 where
     member_count >= 1
+{% if is_incremental() %}
+    and {{ wash_event_lookback_filter('event_date') }}
+{% endif %}

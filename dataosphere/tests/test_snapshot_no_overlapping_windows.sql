@@ -6,7 +6,7 @@ with source as (
         dbt_valid_from,
         coalesce(dbt_valid_to, to_timestamp_ntz('9999-12-31 00:00:00')) as dbt_valid_to
     from
-        {{ ref('snap_dim_household_current') }}
+        {{ ref('snap_dim_household') }}
 ),
 ordered as (
     select  

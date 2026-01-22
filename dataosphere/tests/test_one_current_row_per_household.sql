@@ -2,7 +2,7 @@ select
     household_id,
     count(*) as current_rows
 from
-    {{ ref('snap_dim_household_current') }}
+    {{ ref('snap_dim_household') }}
 where
     dbt_valid_to is null
 group by

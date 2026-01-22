@@ -37,6 +37,7 @@ select
         water_filter_type, 
         primary_water_source,
         -- audit/lineage
-        submission_id    
+        submission_id,
+        record_loaded_at    
 from
     source

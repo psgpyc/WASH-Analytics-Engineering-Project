@@ -10,7 +10,7 @@ with source as (
     select
         *
     from
-        {{ ref('snap_dim_household_current') }}
+        {{ ref('snap_dim_household') }}
 )
 select
     household_id, 
@@ -28,5 +28,4 @@ select
 
 from
     source
-where
-    dbt_valid_to is null
+
