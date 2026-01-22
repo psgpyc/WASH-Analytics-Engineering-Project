@@ -339,3 +339,19 @@ models:
                 severity: warn
                 store_failures: true
 
+  - name: mon_late_arrival_rate_ward_day
+    description: |
+      Ward-by-day monitoring table that quantifies late-arriving survey records.
+      A record is considered “late” when its event time (submitted_at) falls on an
+      earlier date than its warehouse load time (record_loaded_at). This is used
+      to spot enumeration / sync delays, identify wards with reporting lag, and
+      explain shifts between survey rounds without touching KPI logic.
+
+    config:
+      tags: ["monitoring", "wash", "kobo"]
+
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "late_arrival_rate between 0 and 1"
+

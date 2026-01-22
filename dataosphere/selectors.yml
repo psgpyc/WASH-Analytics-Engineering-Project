@@ -1,0 +1,57 @@
+selectors:
+
+  - name: wash_staging
+    description: "Staging layer"
+    definition:
+      method: tag
+      value: staging
+
+  - name: wash_intermediate
+    description: "Intermediate integration"
+    definition:
+      method: tag
+      value: intermediate
+
+  - name: wash_marts
+    description: "Fact and dimension models used by BI"
+    definition:
+      method: tag
+      value: mart
+
+  - name: wash_monitoring
+    description: "Operational monitoring models"
+    definition:
+      method: tag
+      value: monitoring
+
+  - name: wash_snapshots
+    description: "SCD2 snapshots"
+    definition:
+      method: tag
+      value: snapshot
+
+  - name: wash_core_build
+    description: "Staging and intermediate and marts with tests"
+    definition:
+      union:
+        - method: selector
+          value: wash_staging
+        - method: selector
+          value: wash_intermediate
+        - method: selector
+          value: wash_marts
+
+  - name: wash_build_all
+    description: "Core and monitoring"
+    definition:
+      union:
+        - method: selector
+          value: wash_core_build
+        - method: selector
+          value: wash_monitoring
+
+  - name: wash_triage
+    description: "Monitoring only"
+    definition:
+      method: selector
+      value: wash_monitoring

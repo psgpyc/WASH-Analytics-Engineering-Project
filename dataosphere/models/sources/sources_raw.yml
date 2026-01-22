@@ -13,7 +13,7 @@ sources:
 
     config:
       enabled: true
-      tags:  ["survery_raw", "load", "wash"]
+      tags:  ["raw", "load", "wash"]
       loaded_at_field: _loaded_at
       freshness: 
         warn_after: {count: 5, period: hour }

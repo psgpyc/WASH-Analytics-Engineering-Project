@@ -4,9 +4,7 @@ config-version: 2
 
 profile: "dataosphere"
 
-# ----------------------------
-# Paths
-# ----------------------------
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
@@ -15,34 +13,26 @@ macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 docs-paths: ["docs"]
 
-# ----------------------------
-# Build artefacts
-# ----------------------------
+
 target-path: "target"
 clean-targets:
   - "target"
   - "dbt_packages"
   - "logs"
 
-# ----------------------------
-# Variables 
-# ----------------------------
+
 vars:
   wash_project: true
   wash_event_lookback_days: 30
   wash_load_lookback_days: 7
 
-# ----------------------------
-# Snapshots
-# ----------------------------
+
 snapshots:
   dataosphere:
     +schema: snapshots
     +tags: ["snapshot", "wash", "kobo"]
 
-# ----------------------------
-# Models
-# ----------------------------
+
 models:
   dataosphere:
     # Global defaults
@@ -80,19 +70,10 @@ models:
       +schema: monitoring
       +tags: ["monitoring"]
 
-# ----------------------------
-# Tests 
-# ----------------------------
+
 tests:
   dataosphere:
     +store_failures: true
     +schema: dbt_test__audit
     +severity: error
 
-# ----------------------------
-# Hooks 
-# ----------------------------
-# on-run-start:
-#   - "{{ log('Starting dbt run', info=True) }}"
-# on-run-end:
-#   - "{{ log('Finished dbt run', info=True) }}"

@@ -9,7 +9,7 @@ models:
       KPI flag: is_safe_drinking is derived from safe source + safe treatment + no diarrhoea (14 days) rules.
 
     config:
-      tags: ['mart', 'wash', 'kobo']
+      tags: ['mart', 'fact' ,'wash', 'kobo']
     
     data_tests:
       - dbt_utils.unique_combination_of_columns:
@@ -98,7 +98,7 @@ models:
       Notes: event_date is derived from submitted_at (survey-event timestamp) in the upstream fact.
 
     config:
-      tags: ['mart', 'wash', 'kobo']
+      tags: ['mart', 'fact' ,'wash', 'kobo']
 
     data_tests:
       - dbt_utils.unique_combination_of_columns:
@@ -186,7 +186,7 @@ models:
       as-of the event timestamp (event_ts).
 
     config:
-      tags: ['marts', 'wash', 'kobo']
+      tags: ['mart', 'fact' ,'wash', 'kobo']
 
     data_tests:
       - dbt_utils.unique_combination_of_columns:
@@ -228,6 +228,7 @@ models:
 
       - name: dbt_valid_from
         description: "Snapshot validity start timestamp for the household attributes row matched to the event."
+
       - name: dbt_valid_to
         description: "Snapshot validity end timestamp for the household attributes row matched to the event (null = current row)."
 

@@ -9,7 +9,7 @@ models:
       Notes: This represents the “latest” household state based on the warehouse load timestamp logic upstream. For historical point-in-time analysis, use the SCD2 snapshot table instead of this current view.
 
     config:
-      tags: ["mart", "dimension", "wash", "kobo"]
+      tags: ["mart", "dim", "wash", "kobo"]
 
     columns:
       - name: household_id
@@ -63,7 +63,7 @@ models:
       Purpose: Enables point-in-time analysis when you need historical attributes aligned to an event timestamp.
 
     config:
-      tags: ["mart", "dimension", "wash", "kobo"]
+      tags: ["mart", "dim", "wash", "kobo"]
     
     data_tests:
       - dbt_utils.unique_combination_of_columns:
