@@ -212,17 +212,13 @@ Important:
 
 We report using one timestamp so period-based indicators stay consistent.
 
-- event timestamp: record_loaded_at
-- event date: event_date = DATE(record_loaded_at)
+- event timestamp: submitted_at
+- event date(reporting date): event_date = DATE(submitted_at)
 - default reporting grain: ward_id × event_date
 - timezone: treat as UTC, or convert to UTC before deriving event_date
 
-Why record_loaded_at:
-- it is always present and deterministic for warehouse-side reporting
-- it reflects when the record became available for analytics, which the pipeline can guarantee
-
 Eligibility rule
-- If record_loaded_at is null, the row is not eligible for period reporting and must be quarantined or fixed upstream.
+- If event type is submitted and submitted_at is null, the row is not eligible for period reporting and must be quarantined or fixed upstream.
 
 ---
 
@@ -313,76 +309,157 @@ Interpretation
 
 ---
 
-## 6. Published facts
+## 6. Published marts
 
-This section is for anyone consuming the tables. Keep it short: purpose, grain, required fields, and the rules that matter.
+This section is for anyone consuming the tables. 
 
-### 6.1 fact_household_wash_event
 
-Purpose
-- KPI-ready household-event fact used to report safe drinking water by ward and period.
+### 6.1 `fact_household_wash_event`
 
-Grain
-- household_id × submission_id
+**Purpose**
+- KPI-ready household-event fact for reporting *safe drinking water* with consistent logic and stable grains.
 
-Guaranteed slicers
-- ward_id
-- event_date
+**Grain**
+- `household_id × submission_id`
 
-Eligibility
-- only household-events with member_count >= 1
+**Required fields**
+- `household_id`, `submission_id`, `submitted_at`, `event_date`, `ward_id`
 
-Key logic that must not drift
-- is_safe_drinking = has_safe_primary_source AND has_safe_water_filter AND has_no_diarrhoea_14d_members
+**Guaranteed slicers**
+- `ward_id`
+- `event_date`
+
+**Eligibility**
+- Only household-events with `member_count >= 1`
+
+**Key logic that must not drift**
+- `has_no_diarrhoea_14d_members` is **strict** (tri-state):
+  - household is “no diarrhoea” only when:
+    - `total_diarrhoea_yes_14d = 0`
+    - `total_diarrhoea_unknown_14d = 0`
+    - `total_diarrhoea_no_14d = member_count`
+- KPI invariant:
+  - `is_safe_drinking = has_safe_primary_source AND has_safe_water_filter AND has_no_diarrhoea_14d_members`
 
 ---
 
-### 6.2 fact_agg_safe_drinking_ward_day
+### 6.2 `fact_household_wash_event_enriched_scd2`
 
-Purpose
-- ward and day aggregate so BI tools do not rebuild KPI logic.
+**Purpose**
+- Point-in-time enriched household-event fact: joins each household-event to the correct household attributes as of the event timestamp using the SCD2 snapshot validity window.
 
-Grain
-- ward_id × event_date
+**Why it exists**
+- `dim_household_current` answers “what is the household like now?”
+- This model answers “what was the household like at the time of the event?”
 
-Must always be true
-- household_events_safe <= household_events_total
-- pct_safe between 0 and 1
+**Grain**
+- `household_id × submission_id` 
+
+**Join logic**
+- SCD2 interval join on household:
+  - `f.household_id = s.household_id`
+  - `f.submitted_at >= s.dbt_valid_from`
+  - `f.submitted_at < COALESCE(s.dbt_valid_to, '9999-12-31')`
+
+**Adds**
+- `ward_id`, `district`, `municipality`
+- `hh_size_reported`, `has_toilet`
+- `water_filter_type`, `primary_water_source`
+- plus SCD2 bounds: `dbt_valid_from`, `dbt_valid_to` 
+
+**Operational notes**
+- This model depends on snapshot freshness:
+  - snapshot history updates only when `dbt snapshot` runs
+  - if snapshot is stale, enrichment will reflect the last snapshot run
+
+---
+
+### 6.3 `fact_agg_safe_drinking_ward_day`
+
+**Purpose**
+- Ward × day aggregate so BI tools do not rebuild KPI logic and stakeholders can trend the KPI reliably.
+
+**Grain**
+- `ward_id × event_date`
+
+**Must always be true**
+- `household_events_safe <= household_events_total`
+- Percentage is bounded:
+  - `pct_safe BETWEEN 0 AND 1`
+
+**Inputs**
+- Aggregated from `fact_household_wash_event` 
 
 ---
 
 ## 7. Household dimensions and SCD2 history
 
-Household attributes such as filter type, water source, toilet status, household size, and location fields can change over time.
-We keep history, not just the latest value.
+Household attributes (filter type, primary source, toilet, HH size, and location fields) can change over time.
+This repo supports both current-state consumption and historical point-in-time analysis.
 
-### 7.1 Current-state source
-We maintain a current household state dataset at grain:
-- household_id
+---
 
-Built from the latest known household record using:
-- record_loaded_at as the primary ordering
-- a tie-breaker if needed, submitted_at or submission_id
+### 7.1 `dim_household_current`
 
-Example model in this project:
-- int_household_current_source
+**Purpose**
+- Current household attributes for “today’s targeting / latest known state” use-cases.
 
-### 7.2 Snapshot table
-Snapshots store history of household attributes over time.
+**Grain**
+- `household_id`
 
-Operational point
-- snapshots only update when dbt snapshot runs
-- dbt build does not update snapshot history by itself
+**Definition**
+- Current row is defined as `dbt_valid_to IS NULL`.
 
-Snapshot semantics
-- each version row has dbt_valid_from and dbt_valid_to
-- the current row is where dbt_valid_to is null
+**Implementation**
+- A “current view” over the snapshot (so current and history remain aligned without duplicating logic):
+  - source: `snap_dim_household_current`
+  - filter: `dbt_valid_to IS NULL`
 
-### 7.3 Current household dim for BI
-- dim_household_current is a view on top of the snapshot
-- the current row is defined as dbt_valid_to is null
+---
 
-This keeps current and history aligned without duplicating logic.
+### 7.2 `dim_household_history`
+
+**Purpose**
+- SCD2 history dimension of household attributes for audit and longitudinal analysis.
+
+**Grain**
+- `household_id × dbt_valid_from` 
+
+**Key fields**
+- Household attributes: `ward_id`, `district`, `municipality`, `hh_size_reported`, `has_toilet`, `water_filter_type`, `primary_water_source`
+- Validity window:
+  - `dbt_valid_from`
+  - `dbt_valid_to` (NULL means current)
+
+**Implementation**
+- Thin dimensional wrapper on top of the snapshot table:
+  - source: `snap_dim_household_current`
+  - exposes full SCD2 history for BI/analysis
+
+---
+
+### 7.3 Snapshot table: `snap_dim_household_current`
+
+**Purpose**
+- System-of-record for SCD2 history of household attributes.
+
+**Snapshot semantics**
+- Each version row has:
+  - `dbt_valid_from`, `dbt_valid_to`
+- Current row:
+  - `dbt_valid_to IS NULL`
+
+**Operational point**
+- Snapshot history updates only when `dbt snapshot` runs.
+- `dbt build` does not update snapshot history by itself.
+
+**How it is used**
+- Current-state:
+  - `dim_household_current` = snapshot filtered to current row
+- Point-in-time:
+  - `fact_household_wash_event_enriched_scd2` interval-joins events to snapshot windows using `submitted_at`
+- Full history:
+  - `dim_household_history` exposes all snapshot rows as a dimension
 
 ---
 
@@ -405,48 +482,7 @@ Severity
   - drift in categoricals
   - volume changes
 
----
-
-## 9. Monitoring outputs
-
-These exist so we can answer what broke without digging through compiled SQL.
-
-### 9.1 mon_total_by_model_day
-- daily accepted base row counts
-- grain: base_model_name × event_date
-
-### 9.2 mon_rejections_by_model_day
-- daily rejected row counts
-- grain: base_model_name × event_date
-
-### 9.3 mon_rejection_rate_day
-- rejection_rate = rejected / base
-- sanity rules: rate is 0 to 1 and rejected <= base
-
-### 9.4 mon_rejection_by_reason_day
-- daily rejected counts split by one reason bucket per row
-- grain: base_model_name × event_date × reason_bucket
-- reason buckets:
-  - missing_keys
-  - orphan_fk
-  - invalid_required_field
-  - invalid_canonical
-  - invalid_range
-  - unknown_other
-  - soft_deleted
-  - other
-
-Precedence note
-- a row gets the first matching bucket to avoid double-counting.
-
-### 9.5 mon_unknown_diarrhoea_rate_ward_day
-- how often diarrhoea is recorded as unknown
-- grain: ward_id × event_date
-- high unknown rate indicates weak completeness, treat KPI outputs with caution for those slices
-
----
-
-## 10. When you change the contract
+## 9. When you change the contract
 
 If you touch:
 - canonical sets

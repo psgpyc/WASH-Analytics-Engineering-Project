@@ -34,7 +34,7 @@ with fact as (
         water_filter_type,
         primary_water_source
 
-    from {{ ref('snap_dim_household_current') }}
+    from {{ ref('dim_household_history') }}
 
 ), joined as (
     select
