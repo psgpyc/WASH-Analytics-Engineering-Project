@@ -1,5 +1,7 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_region" "current" {}
+
 resource "random_id" "bucket_suffix" {
     byte_length = 3
 }
@@ -45,4 +47,30 @@ module "s3" {
 
     depends_on = [ module.kms ]
 
+}
+
+
+module "sns" {
+
+    source = "./modules/sns"
+
+    sns_topic_name = var.sns_topic_name
+
+    sns_topic_display_name = var.sns_topic_display_name
+
+    sns_delivery_policy = file("./policies/wash-sns-delivery-policy.json")
+
+    sns_topic_policy = templatefile("./policies/wash-sns-resource-policy.json.tpl", {
+
+        current_region = data.aws_region.current.id
+        account_id = data.aws_caller_identity.current.account_id
+        bucket_name = module.s3.bucket_name
+        topic_name = var.sns_topic_name
+
+    })
+
+    sns_tags = var.sns_tags
+
+
+  
 }

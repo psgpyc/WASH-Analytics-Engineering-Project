@@ -123,4 +123,27 @@ variable "sse_algorithm" {
 
 
 
+# sns
+
+variable "sns_topic_name" {
+  type        = string
+  nullable    = false
+  description = "SNS topic name. Must be 1–256 chars, and contain only letters, numbers, hyphens (-), and underscores (_)."
+
+}
+
+variable "sns_topic_display_name" {
+  type        = string
+  nullable    = false
+  description = "SNS topic DisplayName (used for SMS subscriptions). Max 100 characters."
+}
+
+variable "sns_tags" {
+
+  type        = map(string)
+  nullable    = true
+  description = "Optional tags for the SNS topic. Tag key max 128 chars, value max 256 chars. Keys must not start with reserved prefix 'aws:'."
+
+}
+
 
