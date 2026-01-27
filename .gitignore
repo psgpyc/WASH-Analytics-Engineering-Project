@@ -55,12 +55,6 @@ yarn-error.log*
 # -------------------------------------------------------------------
 *.log
 
-# -------------------------------------------------------------------
-# Terraform
-# -------------------------------------------------------------------
-infra/
-/infra/
-
 
 # -------------------------------------------------------------------
 # Exception
@@ -68,3 +62,40 @@ infra/
 
 !dataosphere/ci/
 !dataosphere/ci/profiles.yml
+
+
+# Local .terraform directories
+**/.terraform/*
+**/.terraform.lock.hcl
+
+# Terraform state (NEVER commit)
+**/*.tfstate
+**/*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Terraform CLI config files (may contain credentials)
+.terraformrc
+terraform.rc
+
+# Plan files
+*.tfplan
+*.plan
+
+# Variable files that often contain secrets
+*.tfvars
+*.tfvars.json
+
+# Override files (local-only)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local provider/plugin binaries (rare, but safe)
+.terraform.d/
+
+# Generated files (optional)
+*.tf.json
