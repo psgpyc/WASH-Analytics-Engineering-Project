@@ -10,20 +10,21 @@
 
 # WASH: Analytics Engineering Project, Modelling Kobo-style survey data in Snowflake using dbt.
 
-This repository is a production-shaped analytics engineering case study. 
-It demonstrates how to take messy, semi-structured, late-arriving survey data and turn it into deterministic, auditable analytics outputs.
+This repository is intentionally production-shaped. 
+It demonstrates how to take messy, semi-structured, late-arriving data and turn it into deterministic, auditable analytics outputs.
 
 Specifically, this project demonstrates:
 
 - Modelling semi-structured JSON survey submissions in Snowflake using dbt
 - Designing analytics models that remain stable under late-arriving data
-- Enforcing data contracts and quarantining invalid records instead of silently dropping them
-- Publishing analytics-ready fact and dimension tables for BI consumption
+- Enforcing data contracts and quarantining invalid records
+- Publishing analytics-ready fact and dimension tables for downstream BI consumption
 - Monitoring data freshness, volume drift, and rejection rates over time
 
 ## Architecture overview
 
-Raw Kobo-style JSON survey submissions land in a private, SSE-KMS encrypted S3 bucket. Events flow through SNS to SQS (with a DLQ), and Snowpipe auto-ingests the data into Snowflake RAW tables.
+Raw Kobo-style JSON survey submissions land in a private, SSE-KMS encrypted S3 bucket. 
+Events flow through SNS to SQS (with a DLQ), and Snowpipe auto-ingests the data into Snowflake RAW tables.
 
 From there, dbt standardises and validates the data, quarantines bad rows, builds integrated intermediate models, publishes dimensional marts for BI, and ships monitoring models for freshness and data quality.
 
@@ -67,7 +68,7 @@ Here is the approach I followed:
 1) **Stakeholder Alignment**
 
    - Confirm what “safe drinking water” means in their programme context? What water sources and filtration methods are considered safe?
-   - Agree on how to treat missing/“unknown” values, especially for KPI-critical fields and health outcomes.
+   - Agree on how to treat missing/“unknown” values.
    - Agree the reporting time basis that we can guarantee consistently in the warehouse.
    - Agree what should be excluded from downstream reporting.
    - Align on **late-arriving data** expectations and how far back is the lookback window.  
@@ -94,7 +95,6 @@ Here is the approach I followed:
 4) **Build the dbt layers**
 
    <img width="659" height="526" alt="image" src="https://github.com/user-attachments/assets/02f84dc6-70c1-4661-adee-74f9ea75702a" />
-
 
    - **Staging (`stg_`)** standardises types and categoricals, enforces grains, and generates DQ flags.
    - **Quarantine (`__rejected`)** keeps bad rows visible and replayable without letting them pollute marts.
