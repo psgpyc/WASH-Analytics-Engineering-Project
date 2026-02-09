@@ -6,11 +6,24 @@
 
 > Live dbt Docs: https://psgpyc.github.io/WASH-Analytics-Engineering-Project/
 
+> Quick review guide: [How to review this repo](#how-to-review-this-repo)
+
 # WASH: Analytics Engineering Project, Modelling Kobo-style survey data in Snowflake using dbt.
 
-This repo is intentionally “production-shaped”. 
+This repository is a production-shaped analytics engineering case study. 
+It demonstrates how to take messy, semi-structured, late-arriving survey data and turn it into deterministic, auditable analytics outputs.
 
-Raw Kobo-style JSON lands in a private, SSE-KMS encrypted S3 bucket, events flow via SNS to SQS (with DLQ), and Snowpipe auto-ingests into Snowflake RAW tables. 
+Specifically, this project demonstrates:
+
+- Modelling semi-structured JSON survey submissions in Snowflake using dbt
+- Designing analytics models that remain stable under late-arriving data
+- Enforcing data contracts and quarantining invalid records instead of silently dropping them
+- Publishing analytics-ready fact and dimension tables for BI consumption
+- Monitoring data freshness, volume drift, and rejection rates over time
+
+## Architecture overview
+
+Raw Kobo-style JSON survey submissions land in a private, SSE-KMS encrypted S3 bucket. Events flow through SNS to SQS (with a DLQ), and Snowpipe auto-ingests the data into Snowflake RAW tables.
 
 From there, dbt standardises and validates the data, quarantines bad rows, builds integrated intermediate models, publishes dimensional marts for BI, and ships monitoring models for freshness and data quality.
 
@@ -18,9 +31,16 @@ From there, dbt standardises and validates the data, quarantines bad rows, build
 
 ## Problem Statement
 
-A programme team running a Kobo-based WASH survey already had RAW tables landing in Snowflake, but they needed reporting that was consistent and explainable day to day. 
+A programme team running a Kobo-based WASH survey needed reporting that was consistent and explainable day to day.
 
-> The ask was straightforward: take what is arriving in RAW and turn it into something they can safely use for routine monitoring and decision-making.
+Key challenges included:
+
+- Late-arriving submissions due to poor connectivity in remote areas
+- Schema drift and inconsistent value sets across survey versions
+- Ambiguous KPI definitions implemented directly in BI tools
+- Silent data quality failures that were hard to detect
+
+> The ask was straightforward: take what is arriving in and turn it into something they can safely use for routine monitoring and decision-making.
 
 They wanted one primary KPI they could trust and trend:
 
@@ -35,15 +55,14 @@ Additionally, they also wanted to answer practical questions when the numbers mo
 For context, WASH programmes span a broad set of interventions across water, sanitation, and hygiene (see UNHCR’s overview: https://www.unhcr.org/sens/introduction/module-5-wash/).  
 In this project, I focus only on the drinking water slice of that domain — specifically safe water sources and household-level treatment/filters — because that is what the KPI is designed to measure.
 
-
 ## Workflow
 
 I treated this as an analytics engineering problem. The goal was to make the KPI deterministic, auditable, and resilient to messy, event-scoped survey data.
 
+Here is the approach I followed:
+
 <img width="878" height="396" alt="image" src="https://github.com/user-attachments/assets/05c5ab05-cb46-4823-be4a-c368abe52563" />
 
-
-Here is the approach I followed:
 
 1) **Stakeholder Alignment**
 
@@ -90,33 +109,7 @@ Here is the approach I followed:
    - Surface these signals in CI and in warehouse tables so issues are caught before reporting.
 
 
-
 The result is a KPI that is repeatable, auditable, and explainable: the definition is written down, enforced with tests, and supported by monitoring outputs so stakeholders can understand changes instead of guessing.
-
-
-## The data domain
-
-The RAW tables represent a Kobo-style form structure:
-
-<img width="1313" height="641" alt="image" src="https://github.com/user-attachments/assets/7fe9e779-52ac-4f1c-b3e0-fd6988059e9a" />
-
-
-- `kobo_submission`  
-  - grain: 1 row per `submission_id`
-  - includes submission status, ward_id, location fields, timestamps, lineage
-
-- `kobo_household`  
-  - household section captured inside a submission (event-scoped)
-  - households can appear in multiple submissions over time
-
-- `kobo_member`  
-  - repeat group for household members
-  - grain is composite: `(household_id, submission_id, member_index)`
-
-- `kobo_water_point`  
-  - observations of water points
-  - grain is composite: `(water_point_id, submission_id)` (depending on form design)
-
 
 ---
 
@@ -125,16 +118,22 @@ The RAW tables represent a Kobo-style form structure:
 ```
 dataosphere/
   models/
-    staging/           # stg_ models + __base and __rejected patterns
-    intermediate/      # int_ integration and rollups
+    sources/            # source definitions for RAW/LANDING tables
+    extract/            # extracts typed columns from landing JSON (VARIANT)
+    raw/                # raw_* models (canonical RAW tables built from landing)
+    staging/            # stg_ models with stg_*__base and stg_*__rejected patterns
+    intermediate/       # int_ integration models and rollups (stable grains)
     marts/
-      facts/           # KPI facts and aggregates
-      dimentions/      # dimensions (current)
-    monitoring/        # mon_ operational monitoring outputs
-  snapshots/           # SCD2 snapshots (dbt snapshots)
+      facts/            # KPI facts and aggregates for BI
+      dimensions/       # dimensions (current and derived)
+    monitoring/         # mon_ operational monitoring outputs (freshness, rejection rates)
+  snapshots/            # SCD2 snapshots (dbt snapshots)
+  macros/               # reusable SQL macros (incremental filters, helpers)
   docs/
     data-contract.md
     monitoring-contract.md
+infra/
+  terraform/            # AWS infrastructure-as-code (S3, notifications, queues, etc.)
 ```
 
 ##  Documentation and contracts
@@ -148,6 +147,20 @@ This repo keeps implementation and contracts close to the code:
 - **Contracts enforced in code:** dbt YAML + tests + macros.
 
 ---
+
+### Late-arriving data strategy
+
+Survey submissions may arrive days or weeks late.
+
+To handle this safely:
+
+- Incremental models use event timestamps rather than load timestamps
+- Lookback windows are applied to reprocess recent history on each run
+- Deduplication logic ensures idempotent re-runs
+- Monitoring models surface late-arrival patterns and anomalies
+
+This ensures downstream KPIs remain stable even as late data arrives.
+
 
 ## Published marts
 
@@ -203,64 +216,49 @@ Full monitoring definitions live in [`dataosphere/docs/monitoring-contract.md`](
 
 ---
 
-## How to run
+## CI and documentation
 
-Install packages:
-```bash
-dbt deps
-```
+- dbt models are validated using GitHub Actions
+- CI runs use a Snowflake service user with key-pair authentication
+- Each pull request runs in an isolated schema
+- dbt documentation is published automatically via GitHub Pages
 
-Parse (fast sanity check):
-```bash
-dbt parse
-```
+Live documentation:
+https://psgpyc.github.io/WASH-Analytics-Engineering-Project/
 
-Build + test staging first:
-```bash
-dbt build --select tag:staging
-```
+## How to review this repo
 
-Build everything:
-```bash
-dbt build
-```
+If you are reviewing this repository as part of a hiring or technical evaluation, the links below point to the most relevant parts.
 
-Run snapshots:
-```bash
-dbt snapshot
-```
+**Architecture and flow**  
+Start with the high-level design to understand how data moves from ingestion to analytics outputs.  
+[Architecture overview](#architecture-overview)
 
-Run only monitoring:
-```bash
-dbt build --select tag:monitoring
-```
+**Analytics outputs and KPIs**  
+Review the final analytical interfaces intended for BI tools and reporting.  
+[Primary KPI facts](dataosphere/models/marts/facts)  
+[Dimensions](dataosphere/models/marts/dimensions)
 
----
+**Workflow and modelling approach**  
+Understand the contract-first approach, late-arriving strategy, and data quality design.  
+[Workflow](#workflow)
 
-## How to review changes
+**Data contracts and quality rules**  
+Review how KPI definitions, allowed values, and rejected data are documented.  
+[Data contract](dataosphere/docs/data-contract.md)  
+[Monitoring contract](dataosphere/docs/monitoring-contract.md)
 
-This repo is designed to make changes reviewable:
+**Lineage and documentation**  
+Explore full model lineage, column-level documentation, and tests.  
+[Live dbt Docs](https://psgpyc.github.io/WASH-Analytics-Engineering-Project/)
 
-- KPI definitions live in:
-  - `docs/data-contract.md`
-  - macros for safe lists
-  - dbt tests that lock invariants
+**Operational monitoring**  
+Inspect the models used to track freshness, rejection rates, and data drift.  
+[Monitoring models](dataosphere/models/monitoring)
 
----
-
-### CI on pull requests 
-- On every PR to `master`, CI runs:
-  - `dbt deps`
-  - `dbt debug`
-  - `dbt build` for selected layers (staging / intermediate / marts / monitoring)
-- CI writes to an isolated Snowflake schema per PR:
-  - `DBT_CI_PR_<pr_number>`
-- CI uses an env-var driven dbt profile stored in `dataosphere/ci/` .
-
-### Docs published to GitHub Pages
-- On every push to `master`, the workflow generates dbt docs and publishes them to GitHub Pages.
-- This keeps documentation always up to date with the latest merged definitions (models, tests, exposures, contracts).
-
+**Infrastructure**  
+Review the infrastructure-as-code used to provision ingestion components.  
+[Terraform configuration](infra)
 
 ## Licence
 
