@@ -195,7 +195,7 @@ Tracks how often member diarrhoea status is `'unknown'`.
 
 ---
 
-## Operational Use (How teams use this)
+## Operational Use
 
 ### Daily checks (fast triage)
 1) `mon_rejection_rate_day`  
